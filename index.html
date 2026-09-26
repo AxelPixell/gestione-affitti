@@ -413,7 +413,7 @@
 
     let state = { tenants: [], expenses: [], payments: [] };
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       const syncStatus = document.getElementById("syncStatus");
       const selectorContainer = document.getElementById("propertySelectorContainer");
       const loginBtn = document.getElementById("loginBtn");
@@ -432,7 +432,7 @@
         unsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Retrocompatibilità se l'utente aveva già dati vecchi non divisi per appartamento
+            // Migrazione per retrocompatibilità
             if (data.tenants && !data.properties) {
               const defaultId = "prop_" + Date.now();
               rootData = {
@@ -451,7 +451,7 @@
               rootData = data;
             }
           } else {
-            // Primo accesso dell'utente: crea la prima istanza vuota
+            // Primo accesso: crea struttura base
             const defaultId = "prop_" + Date.now();
             rootData = {
               activePropertyId: defaultId,
@@ -467,9 +467,14 @@
             saveCloud();
           }
 
+          // Aggiorna lo stato e forza il rendering completo
           updatePropertyDropdown();
           loadActivePropertyState();
-          renderAll();
+          
+          // Lancia il rendering in sicurezza
+          if (typeof window.renderAll === "function") {
+            window.renderAll();
+          }
         }, (error) => {
           console.error("Errore sync:", error);
           syncStatus.textContent = "🔴 Errore caricamento dati";
@@ -484,7 +489,9 @@
         selectorContainer.style.display = "none";
         loginBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
-        renderAll();
+        if (typeof window.renderAll === "function") {
+          window.renderAll();
+        }
       }
     });
 
