@@ -227,13 +227,17 @@
 
 <body>
   <header>
-    <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Sincronizzazione in corso...</span></h1>
+    <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
 
     <nav>
       <button data-page="dashboard" class="active">Dashboard</button>
       <button data-page="tenants">Inquilini</button>
       <button data-page="expenses">Spese</button>
       <button data-page="rooms">Stanze</button>
+      
+      <!-- Pulsanti Login / Logout -->
+      <button onclick="login()" class="btn-success" style="margin-left: auto;">Accedi con Google</button>
+      <button onclick="logout()" class="btn-secondary">Esci</button>
     </nav>
   </header>
 
