@@ -37,7 +37,33 @@
 
     header h1 { margin: 0 0 15px; font-size: 25px; }
 
-    nav { display: flex; flex-wrap: wrap; gap: 8px; }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .property-selector {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1f2937;
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+
+    .property-selector select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: #374151;
+      color: white;
+      border: 1px solid #4b5563;
+    }
+
+    nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
     nav button {
       border: 0;
@@ -227,7 +253,17 @@
 
 <body>
   <header>
-    <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
+    <div class="header-bar">
+      <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
+      
+      <!-- Selettore Appartamento / Istanza -->
+      <div class="property-selector" id="propertySelectorContainer" style="display: none;">
+        <label for="propertySelect" style="color: white; margin-bottom: 0;">Appartamento:</label>
+        <select id="propertySelect" onchange="switchProperty(this.value)"></select>
+        <button class="btn-primary" onclick="createNewProperty()">+ Nuovo Appartamento</button>
+        <button class="btn-danger" onclick="deleteCurrentProperty()" title="Elimina appartamento selezionato">🗑️</button>
+      </div>
+    </div>
 
     <nav>
       <button data-page="dashboard" class="active">Dashboard</button>
@@ -236,8 +272,8 @@
       <button data-page="rooms">Stanze</button>
       
       <!-- Pulsanti Login / Logout -->
-      <button onclick="login()" class="btn-success" style="margin-left: auto;">Accedi con Google</button>
-      <button onclick="logout()" class="btn-secondary">Esci</button>
+      <button id="loginBtn" onclick="login()" class="btn-success" style="margin-left: auto;">Accedi con Google</button>
+      <button id="logoutBtn" onclick="logout()" class="btn-secondary" style="display: none;">Esci</button>
     </nav>
   </header>
 
@@ -345,29 +381,20 @@
     </div>
   </div>
 
-  <!-- SCRIPT FIREBASE CON AUTENTICAZIONE UTENTE -->
+  <!-- SCRIPT FIREBASE CON GESTIONE MULTI-ISTANZA -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-    // INSERISCI QUI LA TUA CONFIGURAZIONE FIREBASE
     const firebaseConfig = {
-
-  apiKey: "AIzaSyBuyOBhjDdxHi92mETmrrAKx69Rf78tInc",
-
-  authDomain: "pagamenti-kennedy-51.firebaseapp.com",
-
-  projectId: "pagamenti-kennedy-51",
-
-  storageBucket: "pagamenti-kennedy-51.firebasestorage.app",
-
-  messagingSenderId: "990570367263",
-
-  appId: "1:990570367263:web:4fe06666780660a10a482a"
-
-};
-
+      apiKey: "AIzaSyBuyOBhjDdxHi92mETmrrAKx69Rf78tInc",
+      authDomain: "pagamenti-kennedy-51.firebaseapp.com",
+      projectId: "pagamenti-kennedy-51",
+      storageBucket: "pagamenti-kennedy-51.firebasestorage.app",
+      messagingSenderId: "990570367263",
+      appId: "1:990570367263:web:4fe06666780660a10a482a"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -376,28 +403,72 @@
 
     let currentUser = null;
     let unsubscribe = null;
+
+    // Struttura Cloud:
+    // rootData = { activePropertyId: "prop_1", properties: { prop_1: { name: "Appartamento 1", tenants: [], expenses: [], payments: [] } } }
+    let rootData = {
+      activePropertyId: null,
+      properties: {}
+    };
+
     let state = { tenants: [], expenses: [], payments: [] };
 
-    // Gestione stato di Login/Logout
     onAuthStateChanged(auth, (user) => {
       const syncStatus = document.getElementById("syncStatus");
-      
+      const selectorContainer = document.getElementById("propertySelectorContainer");
+      const loginBtn = document.getElementById("loginBtn");
+      const logoutBtn = document.getElementById("logoutBtn");
+
       if (user) {
         currentUser = user;
         syncStatus.textContent = `🟢 Utente: ${user.displayName || user.email}`;
-        
-        // Collega il database allo spazio PRIVATO dell'utente attivo
+        selectorContainer.style.display = "flex";
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "inline-block";
+
         const userDocRef = doc(db, "users", user.uid);
-        
+
         if (unsubscribe) unsubscribe();
         unsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
-            state = docSnap.data();
+            const data = docSnap.data();
+            // Retrocompatibilità se l'utente aveva già dati vecchi non divisi per appartamento
+            if (data.tenants && !data.properties) {
+              const defaultId = "prop_" + Date.now();
+              rootData = {
+                activePropertyId: defaultId,
+                properties: {
+                  [defaultId]: {
+                    name: "Appartamento Principale",
+                    tenants: data.tenants || [],
+                    expenses: data.expenses || [],
+                    payments: data.payments || []
+                  }
+                }
+              };
+              saveCloud();
+            } else {
+              rootData = data;
+            }
           } else {
-            // Primo accesso dell'utente: crea un database "in bianco"
-            state = { tenants: [], expenses: [], payments: [] };
+            // Primo accesso dell'utente: crea la prima istanza vuota
+            const defaultId = "prop_" + Date.now();
+            rootData = {
+              activePropertyId: defaultId,
+              properties: {
+                [defaultId]: {
+                  name: "Appartamento 1",
+                  tenants: [],
+                  expenses: [],
+                  payments: []
+                }
+              }
+            };
             saveCloud();
           }
+
+          updatePropertyDropdown();
+          loadActivePropertyState();
           renderAll();
         }, (error) => {
           console.error("Errore sync:", error);
@@ -406,14 +477,38 @@
 
       } else {
         currentUser = null;
+        rootData = { activePropertyId: null, properties: {} };
         state = { tenants: [], expenses: [], payments: [] };
         if (unsubscribe) unsubscribe();
         syncStatus.textContent = "🔒 Accedi per salvare i dati";
+        selectorContainer.style.display = "none";
+        loginBtn.style.display = "inline-block";
+        logoutBtn.style.display = "none";
         renderAll();
       }
     });
 
-    // Funzione per salvare nel Cloud privato
+    function loadActivePropertyState() {
+      if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
+        state = rootData.properties[rootData.activePropertyId];
+      } else {
+        state = { tenants: [], expenses: [], payments: [] };
+      }
+    }
+
+    function updatePropertyDropdown() {
+      const select = document.getElementById("propertySelect");
+      select.innerHTML = "";
+      Object.keys(rootData.properties || {}).forEach(id => {
+        const prop = rootData.properties[id];
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = prop.name || "Appartamento " + id;
+        if (id === rootData.activePropertyId) option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
     async function saveCloud() {
       if (!currentUser) {
         alert("Devi accedere con Google per salvare i tuoi dati!");
@@ -424,7 +519,13 @@
       syncStatus.textContent = "⏳ Salvataggio...";
       try {
         const userDocRef = doc(db, "users", currentUser.uid);
-        await setDoc(userDocRef, state);
+        
+        // Aggiorna lo stato dell'istanza attiva prima di salvare
+        if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
+          rootData.properties[rootData.activePropertyId] = state;
+        }
+
+        await setDoc(userDocRef, rootData);
         syncStatus.textContent = `🟢 Utente: ${currentUser.displayName || currentUser.email}`;
       } catch (e) {
         console.error("Errore salvataggio:", e);
@@ -432,13 +533,47 @@
       }
     }
 
-    // Funzioni di Login e Logout
+    window.createNewProperty = () => {
+      const name = prompt("Inserisci il nome del nuovo appartamento/istanza (es. 'Via Roma 10'):");
+      if (!name || !name.trim()) return;
+
+      const newId = "prop_" + Date.now();
+      rootData.properties[newId] = {
+        name: name.trim(),
+        tenants: [],
+        expenses: [],
+        payments: []
+      };
+      rootData.activePropertyId = newId;
+      saveCloud();
+    };
+
+    window.switchProperty = (propertyId) => {
+      rootData.activePropertyId = propertyId;
+      loadActivePropertyState();
+      saveCloud();
+      renderAll();
+    };
+
+    window.deleteCurrentProperty = () => {
+      const keys = Object.keys(rootData.properties);
+      if (keys.length <= 1) {
+        alert("Devi avere almeno un appartamento gestito.");
+        return;
+      }
+      const currentPropName = rootData.properties[rootData.activePropertyId]?.name || "questo appartamento";
+      if (confirm(`Sei sicuro di voler eliminare definitivamente "${currentPropName}" e tutti i suoi dati?`)) {
+        delete rootData.properties[rootData.activePropertyId];
+        rootData.activePropertyId = Object.keys(rootData.properties)[0];
+        saveCloud();
+      }
+    };
+
     window.login = () => signInWithPopup(auth, provider).catch(err => alert("Errore login: " + err.message));
     window.logout = () => signOut(auth);
     window.save = saveCloud;
     window.getState = () => state;
   </script>
- 
 
   <script>
     const money = value => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
@@ -535,7 +670,7 @@
 
       const container = document.getElementById("dashboardTenants");
       if (!state.tenants.length) {
-        container.innerHTML = '<p class="empty">Nessun inquilino presente.</p>';
+        container.innerHTML = '<p class="empty">Nessun inquilino presente in questo appartamento.</p>';
         return;
       }
 
@@ -564,7 +699,7 @@
       const state = window.getState ? window.getState() : { tenants: [] };
       const container = document.getElementById("expenseTenantChecks");
       if (!state.tenants.length) {
-        container.innerHTML = '<p class="empty">Aggiungi prima almeno un inquilino.</p>';
+        container.innerHTML = '<p class="empty">Aggiungi prima almeno un inquilino a questo appartamento.</p>';
         return;
       }
       container.innerHTML = state.tenants.map(tenant => `
@@ -578,7 +713,7 @@
       const state = window.getState ? window.getState() : { tenants: [] };
       const container = document.getElementById("tenantsList");
       if (!state.tenants.length) {
-        container.innerHTML = '<p class="empty">Nessun inquilino presente.</p>';
+        container.innerHTML = '<p class="empty">Nessun inquilino presente in questo appartamento.</p>';
         return;
       }
       container.innerHTML = `
@@ -604,7 +739,7 @@
       const state = window.getState ? window.getState() : { expenses: [], tenants: [] };
       const container = document.getElementById("expensesList");
       if (!state.expenses.length) {
-        container.innerHTML = '<p class="empty">Nessuna spesa presente.</p>';
+        container.innerHTML = '<p class="empty">Nessuna spesa presente in questo appartamento.</p>';
         return;
       }
       const sorted = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date));
@@ -781,9 +916,9 @@
       window.open(`https://wa.me/${tenant.phone}?text=${encodeURIComponent(msg)}`, "_blank");
     }
 
-    document.querySelectorAll("nav button").forEach(btn => {
+    document.querySelectorAll("nav button[data-page]").forEach(btn => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll("nav button[data-page]").forEach(b => b.classList.remove("active"));
         document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
         btn.classList.add("active");
         document.getElementById(btn.dataset.page).classList.add("active");
