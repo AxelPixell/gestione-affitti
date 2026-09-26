@@ -49,10 +49,17 @@
     .property-selector {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       background: #1f2937;
       padding: 8px 12px;
       border-radius: 8px;
+    }
+
+    .active-property-name {
+      color: #60a5fa;
+      font-weight: bold;
+      font-size: 16px;
+      margin-right: 5px;
     }
 
     .property-selector select {
@@ -61,6 +68,7 @@
       background: #374151;
       color: white;
       border: 1px solid #4b5563;
+      max-width: 200px;
     }
 
     nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -256,10 +264,11 @@
     <div class="header-bar">
       <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
       
-      <!-- Selettore Appartamento / Istanza -->
-      <div class="property-selector" id="propertySelectorContainer" style="display: none;">
-        <label for="propertySelect" style="color: white; margin-bottom: 0;">Appartamento:</label>
+      <!-- Selettore Istanza / Appartamento -->
+      <div class="property-selector" id="propertySelectorContainer">
+        <span id="activePropertyName" class="active-property-name">Appartamento</span>
         <select id="propertySelect" onchange="switchProperty(this.value)"></select>
+        <button class="btn-secondary" onclick="renameCurrentProperty()" title="Rinomina appartamento selezionato">✏️ Modifica nome</button>
         <button class="btn-primary" onclick="createNewProperty()">+ Nuovo Appartamento</button>
         <button class="btn-danger" onclick="deleteCurrentProperty()" title="Elimina appartamento selezionato">🗑️</button>
       </div>
@@ -381,7 +390,7 @@
     </div>
   </div>
 
-  <!-- SCRIPT FIREBASE CON GESTIONE MULTI-ISTANZA -->
+  <!-- SCRIPT FIREBASE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -404,8 +413,6 @@
     let currentUser = null;
     let unsubscribe = null;
 
-    // Struttura Cloud:
-    // rootData = { activePropertyId: "prop_1", properties: { prop_1: { name: "Appartamento 1", tenants: [], expenses: [], payments: [] } } }
     let rootData = {
       activePropertyId: null,
       properties: {}
@@ -413,16 +420,14 @@
 
     let state = { tenants: [], expenses: [], payments: [] };
 
-    onAuthStateChanged(auth, async (user) => {
+    onAuthStateChanged(auth, (user) => {
       const syncStatus = document.getElementById("syncStatus");
-      const selectorContainer = document.getElementById("propertySelectorContainer");
       const loginBtn = document.getElementById("loginBtn");
       const logoutBtn = document.getElementById("logoutBtn");
 
       if (user) {
         currentUser = user;
         syncStatus.textContent = `🟢 Utente: ${user.displayName || user.email}`;
-        selectorContainer.style.display = "flex";
         loginBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
 
@@ -432,14 +437,13 @@
         unsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Migrazione per retrocompatibilità
             if (data.tenants && !data.properties) {
               const defaultId = "prop_" + Date.now();
               rootData = {
                 activePropertyId: defaultId,
                 properties: {
                   [defaultId]: {
-                    name: "Appartamento Principale",
+                    name: "Appartamento 1",
                     tenants: data.tenants || [],
                     expenses: data.expenses || [],
                     payments: data.payments || []
@@ -451,7 +455,6 @@
               rootData = data;
             }
           } else {
-            // Primo accesso: crea struttura base
             const defaultId = "prop_" + Date.now();
             rootData = {
               activePropertyId: defaultId,
@@ -467,14 +470,9 @@
             saveCloud();
           }
 
-          // Aggiorna lo stato e forza il rendering completo
           updatePropertyDropdown();
           loadActivePropertyState();
-          
-          // Lancia il rendering in sicurezza
-          if (typeof window.renderAll === "function") {
-            window.renderAll();
-          }
+          if (typeof window.renderAll === "function") window.renderAll();
         }, (error) => {
           console.error("Errore sync:", error);
           syncStatus.textContent = "🔴 Errore caricamento dati";
@@ -486,12 +484,9 @@
         state = { tenants: [], expenses: [], payments: [] };
         if (unsubscribe) unsubscribe();
         syncStatus.textContent = "🔒 Accedi per salvare i dati";
-        selectorContainer.style.display = "none";
         loginBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
-        if (typeof window.renderAll === "function") {
-          window.renderAll();
-        }
+        if (typeof window.renderAll === "function") window.renderAll();
       }
     });
 
@@ -505,13 +500,24 @@
 
     function updatePropertyDropdown() {
       const select = document.getElementById("propertySelect");
+      const activeNameLabel = document.getElementById("activePropertyName");
       select.innerHTML = "";
-      Object.keys(rootData.properties || {}).forEach(id => {
+
+      const keys = Object.keys(rootData.properties || {});
+      
+      keys.forEach((id, index) => {
         const prop = rootData.properties[id];
+        // Se non c'è un nome personalizzato, imposta "Appartamento" o "Appartamento N"
+        const displayName = prop.name && prop.name.trim() ? prop.name : `Appartamento ${index + 1}`;
+        
         const option = document.createElement("option");
         option.value = id;
-        option.textContent = prop.name || "Appartamento " + id;
-        if (id === rootData.activePropertyId) option.selected = true;
+        option.textContent = displayName;
+        
+        if (id === rootData.activePropertyId) {
+          option.selected = true;
+          activeNameLabel.textContent = displayName;
+        }
         select.appendChild(option);
       });
     }
@@ -527,9 +533,10 @@
       try {
         const userDocRef = doc(db, "users", currentUser.uid);
         
-        // Aggiorna lo stato dell'istanza attiva prima di salvare
         if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
-          rootData.properties[rootData.activePropertyId] = state;
+          rootData.properties[rootData.activePropertyId].tenants = state.tenants;
+          rootData.properties[rootData.activePropertyId].expenses = state.expenses;
+          rootData.properties[rootData.activePropertyId].payments = state.payments;
         }
 
         await setDoc(userDocRef, rootData);
@@ -541,12 +548,12 @@
     }
 
     window.createNewProperty = () => {
-      const name = prompt("Inserisci il nome del nuovo appartamento/istanza (es. 'Via Roma 10'):");
-      if (!name || !name.trim()) return;
+      const name = prompt("Inserisci il nome del nuovo appartamento (es. 'Via Roma 10'):");
+      const finalName = name && name.trim() ? name.trim() : "Appartamento";
 
       const newId = "prop_" + Date.now();
       rootData.properties[newId] = {
-        name: name.trim(),
+        name: finalName,
         tenants: [],
         expenses: [],
         payments: []
@@ -555,11 +562,24 @@
       saveCloud();
     };
 
+    window.renameCurrentProperty = () => {
+      if (!rootData.activePropertyId || !rootData.properties[rootData.activePropertyId]) return;
+      const currentName = rootData.properties[rootData.activePropertyId].name || "Appartamento";
+      const newName = prompt("Inserisci il nuovo nome dell'appartamento:", currentName);
+      
+      if (newName !== null && newName.trim() !== "") {
+        rootData.properties[rootData.activePropertyId].name = newName.trim();
+        updatePropertyDropdown();
+        saveCloud();
+      }
+    };
+
     window.switchProperty = (propertyId) => {
       rootData.activePropertyId = propertyId;
       loadActivePropertyState();
+      updatePropertyDropdown();
       saveCloud();
-      renderAll();
+      if (typeof window.renderAll === "function") window.renderAll();
     };
 
     window.deleteCurrentProperty = () => {
@@ -667,6 +687,7 @@
       renderExpenses();
       renderRooms();
     }
+    window.renderAll = renderAll;
 
     function renderDashboard() {
       const state = window.getState ? window.getState() : { tenants: [], expenses: [] };
