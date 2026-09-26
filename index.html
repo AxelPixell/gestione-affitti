@@ -341,55 +341,100 @@
     </div>
   </div>
 
-  <!-- SCRIPT FIREBASE -->
+  <!-- SCRIPT FIREBASE CON AUTENTICAZIONE UTENTE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     // INSERISCI QUI LA TUA CONFIGURAZIONE FIREBASE
     const firebaseConfig = {
-      apiKey: "TUA_API_KEY",
-      authDomain: "TUO_PROGETTO.firebaseapp.com",
-      projectId: "TUO_PROGETTO_ID",
-      storageBucket: "TUO_PROGETTO.appspot.com",
-      messagingSenderId: "1234567890",
-      appId: "1:1234567890:web:abcdef123456"
-    };
+
+  apiKey: "AIzaSyBuyOBhjDdxHi92mETmrrAKx69Rf78tInc",
+
+  authDomain: "pagamenti-kennedy-51.firebaseapp.com",
+
+  projectId: "pagamenti-kennedy-51",
+
+  storageBucket: "pagamenti-kennedy-51.firebasestorage.app",
+
+  messagingSenderId: "990570367263",
+
+  appId: "1:990570367263:web:4fe06666780660a10a482a"
+
+};
+
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const docRef = doc(db, "app_data", "gestione_affitti");
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
+    let currentUser = null;
+    let unsubscribe = null;
     let state = { tenants: [], expenses: [], payments: [] };
 
-    // Sincronizzazione in tempo reale dal Cloud
-    onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        state = docSnap.data();
+    // Gestione stato di Login/Logout
+    onAuthStateChanged(auth, (user) => {
+      const syncStatus = document.getElementById("syncStatus");
+      
+      if (user) {
+        currentUser = user;
+        syncStatus.textContent = `🟢 Utente: ${user.displayName || user.email}`;
+        
+        // Collega il database allo spazio PRIVATO dell'utente attivo
+        const userDocRef = doc(db, "users", user.uid);
+        
+        if (unsubscribe) unsubscribe();
+        unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            state = docSnap.data();
+          } else {
+            // Primo accesso dell'utente: crea un database "in bianco"
+            state = { tenants: [], expenses: [], payments: [] };
+            saveCloud();
+          }
+          renderAll();
+        }, (error) => {
+          console.error("Errore sync:", error);
+          syncStatus.textContent = "🔴 Errore caricamento dati";
+        });
+
       } else {
-        saveCloud();
+        currentUser = null;
+        state = { tenants: [], expenses: [], payments: [] };
+        if (unsubscribe) unsubscribe();
+        syncStatus.textContent = "🔒 Accedi per salvare i dati";
+        renderAll();
       }
-      document.getElementById("syncStatus").textContent = "🟢 Cloud Sincronizzato";
-      renderAll();
-    }, (error) => {
-      console.error("Errore sincronizzazione Cloud:", error);
-      document.getElementById("syncStatus").textContent = "🔴 Errore Sincronizzazione";
     });
 
+    // Funzione per salvare nel Cloud privato
     async function saveCloud() {
-      document.getElementById("syncStatus").textContent = "⏳ Salvataggio...";
+      if (!currentUser) {
+        alert("Devi accedere con Google per salvare i tuoi dati!");
+        login();
+        return;
+      }
+      const syncStatus = document.getElementById("syncStatus");
+      syncStatus.textContent = "⏳ Salvataggio...";
       try {
-        await setDoc(docRef, state);
-        document.getElementById("syncStatus").textContent = "🟢 Cloud Sincronizzato";
+        const userDocRef = doc(db, "users", currentUser.uid);
+        await setDoc(userDocRef, state);
+        syncStatus.textContent = `🟢 Utente: ${currentUser.displayName || currentUser.email}`;
       } catch (e) {
         console.error("Errore salvataggio:", e);
-        document.getElementById("syncStatus").textContent = "🔴 Errore Salvataggio";
+        syncStatus.textContent = "🔴 Errore Salvataggio";
       }
     }
 
+    // Funzioni di Login e Logout
+    window.login = () => signInWithPopup(auth, provider).catch(err => alert("Errore login: " + err.message));
+    window.logout = () => signOut(auth);
     window.save = saveCloud;
     window.getState = () => state;
   </script>
+ 
 
   <script>
     const money = value => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
