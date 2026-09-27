@@ -774,7 +774,7 @@
       container.innerHTML = `
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Data</th><th>Causale</th><th>Categoria</th><th>Totale</th><th>Inquilini</th><th>Quota individuale</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>Data</th><th>Causale</th><th>Categoria</th><th>Totale</th><th>Inquilini</th><th>Quota indiv.</th><th>Azioni</th></tr></thead>
             <tbody>
               ${sorted.map(expense => {
                 const names = expense.tenantIds.map(id => {
@@ -790,12 +790,41 @@
                     <td>${money(expense.amount)}</td>
                     <td>${names.map(escapeHtml).join("<br>")}</td>
                     <td>${money(share)}</td>
-                    <td class="actions-cell"><button class="btn-danger" onclick="deleteExpense('${expense.id}')">Elimina</button></td>
+                    <td class="actions-cell">
+                      <button class="btn-whatsapp" onclick="sendExpenseWhatsApp('${expense.id}')" title="Notifica su WhatsApp">📱 Condividi</button>
+                      <button class="btn-danger" onclick="deleteExpense('${expense.id}')">Elimina</button>
+                    </td>
                   </tr>`;
               }).join("")}
             </tbody>
           </table>
         </div>`;
+    }
+
+    function sendExpenseWhatsApp(expenseId) {
+      const state = window.getState();
+      const expense = state.expenses.find(e => e.id === expenseId);
+      if (!expense) return;
+
+      const tenantNames = expense.tenantIds.map(id => {
+        const t = state.tenants.find(item => item.id === id);
+        return t ? t.name : "Inquilino";
+      });
+
+      const share = expense.tenantIds.length ? expense.amount / expense.tenantIds.length : 0;
+
+      // Costruzione del messaggio formattato
+      let msg = `📌 *NUOVA SPESA REGISTRATA*\n\n`;
+      msg += `🔹 *Causale:* ${expense.description}\n`;
+      msg += `💶 *Importo totale:* ${money(expense.amount)}\n`;
+      msg += `📅 *Data:* ${formatDate(expense.date)}\n`;
+      if (expense.category) msg += `🏷️ *Categoria:* ${expense.category}\n`;
+      msg += `\n👥 *Inquilini coinvolti:* ${tenantNames.join(", ")}\n`;
+      msg += `👉 *Quota a persona:* ${money(share)}\n`;
+      if (expense.notes) msg += `\n📝 *Note:* ${expense.notes}\n`;
+
+      // Apre WhatsApp lasciando scegliere a chi o a quale gruppo inviarlo
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
     }
 
     function renderRooms() {
