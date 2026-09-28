@@ -334,6 +334,17 @@
 
       <div class="card">
         <h2>Situazione inquilini</h2>
+        
+        <!-- BARRA FILTRO ANNO IN DASHBOARD -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="yearFilterDashboard" style="margin: 0;">📅 Filtra situazione per anno:</label>
+            <select id="yearFilterDashboard" onchange="renderDashboard()">
+              <option value="ALL">Da sempre (Tutti gli anni)</option>
+            </select>
+          </div>
+        </div>
+
         <div id="dashboardTenants"></div>
       </div>
     </section>
@@ -374,7 +385,9 @@
             <div class="field">
               <label for="expenseCategory">Categoria</label>
               <select id="expenseCategory">
-                <option value="Utenze">Utenze</option>
+                <option value="Luce">Luce</option>
+                <option value="Gas">Gas</option>
+                <option value="Acqua">Acqua</option>
                 <option value="Internet">Internet</option>
                 <option value="Pulizie">Pulizie</option>
                 <option value="Manutenzione">Manutenzione</option>
@@ -738,8 +751,9 @@
       const years = getAvailableYears();
       const expSelect = document.getElementById("yearFilterExpenses");
       const rmSelect = document.getElementById("yearFilterRooms");
+      const dashSelect = document.getElementById("yearFilterDashboard");
 
-      [expSelect, rmSelect].forEach(select => {
+      [expSelect, rmSelect, dashSelect].forEach(select => {
         if (!select) return;
         const currentVal = select.value;
         select.innerHTML = '<option value="ALL">Tutti gli anni</option>';
@@ -798,10 +812,22 @@
 
     function renderDashboard() {
       const state = window.getState ? window.getState() : { tenants: [], expenses: [] };
+      const selectedYear = document.getElementById("yearFilterDashboard")?.value || "ALL";
+
       document.getElementById("statTenants").textContent = state.tenants.length;
-      document.getElementById("statExpenses").textContent = state.expenses.length;
-      document.getElementById("statExpenseAmount").textContent = money(state.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0));
-      document.getElementById("statDue").textContent = money(state.tenants.reduce((sum, t) => sum + Math.max(getTenantSummary(t).balance, 0), 0));
+      
+      // Calcolo spese filtrate per anno
+      const filteredExpenses = (state.expenses || []).filter(e => selectedYear === "ALL" || (e.date && e.date.startsWith(selectedYear)));
+      document.getElementById("statExpenses").textContent = filteredExpenses.length;
+      document.getElementById("statExpenseAmount").textContent = money(filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0));
+
+      // Calcolo totale ancora da ricevere per il periodo selezionato
+      const totalDueOverall = state.tenants.reduce((sum, t) => {
+        const summary = getTenantSummary(t, selectedYear);
+        return sum + Math.max(summary.balance, 0);
+      }, 0);
+      
+      document.getElementById("statDue").textContent = money(totalDueOverall);
 
       const container = document.getElementById("dashboardTenants");
       if (!state.tenants.length) {
@@ -812,17 +838,26 @@
       container.innerHTML = `
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Inquilino</th><th>Stanza</th><th>Totale dovuto</th><th>Pagato</th><th>Da pagare</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Inquilino</th>
+                <th>Stanza</th>
+                <th>Totale dovuto (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                <th>Pagato (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                <th>Da pagare</th>
+              </tr>
+            </thead>
             <tbody>
               ${state.tenants.map(tenant => {
-                const summary = getTenantSummary(tenant);
+                const summary = getTenantSummary(tenant, selectedYear);
+                const due = Math.max(summary.balance, 0);
                 return `
                   <tr>
                     <td>${escapeHtml(tenant.name)}</td>
                     <td>${escapeHtml(tenant.room || "-")}</td>
                     <td>${money(summary.totalDue)}</td>
                     <td>${money(summary.totalPaid)}</td>
-                    <td class="${summary.balance > 0 ? "positive" : "negative"}">${money(Math.max(summary.balance, 0))}</td>
+                    <td class="${due > 0 ? "positive" : "negative"}">${money(due)}</td>
                   </tr>`;
               }).join("")}
             </tbody>
@@ -1162,8 +1197,9 @@
     document.getElementById("expenseForm").addEventListener("submit", function(e) {
       e.preventDefault();
       const state = window.getState();
+      
+      // Raccoglie gli ID degli inquilini selezionati (se ve ne sono)
       const tenantIds = [...document.querySelectorAll('input[name="expenseTenants"]:checked')].map(i => i.value);
-      if (!tenantIds.length) { alert("Seleziona almeno un inquilino."); return; }
 
       state.expenses.push({
         id: uid("expense"),
@@ -1171,9 +1207,10 @@
         amount: Number(document.getElementById("expenseAmount").value),
         date: document.getElementById("expenseDate").value,
         category: document.getElementById("expenseCategory").value,
-        tenantIds,
+        tenantIds: tenantIds, // Può essere anche un array vuoto []
         notes: document.getElementById("expenseNotes").value.trim()
       });
+
       this.reset();
       window.save();
     });
