@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestione affitto condiviso</title>
 
+  <!-- Chart.js per i grafici -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     :root {
       --primary: #2563eb;
@@ -206,6 +209,48 @@
       width: auto;
     }
 
+    /* STILI TENDINA GRAFICI */
+    .collapsible-btn {
+      width: 100%;
+      background: #374151;
+      color: white;
+      text-align: left;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 14px 18px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-bottom: 15px;
+    }
+
+    .collapsible-btn:hover { background: #1f2937; }
+
+    .collapsible-content {
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    .collapsible-content.open { display: block; }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
+    }
+
+    .chart-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(0,0,0,.04);
+    }
+
+    .chart-card h4 { margin: 0 0 10px 0; font-size: 15px; color: var(--text); }
+
     .tenant-checks {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -282,6 +327,10 @@
       display: inline-block;
       margin-left: 10px;
     }
+
+    @media (max-width: 600px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 
@@ -325,11 +374,38 @@
         <div class="stat"><small>Totale da ricevere</small><strong id="statDue">€ 0,00</strong></div>
       </div>
 
-      <div class="card">
-        <h2>Riepilogo generale</h2>
-        <p class="muted">
-          Aggiungi gli inquilini, registra le spese condivise e inserisci i bonifici dalle schede personali nella sezione “Stanze”.
-        </p>
+      <!-- TENDINA GRAFICI STATISTICI -->
+      <button type="button" class="collapsible-btn" onclick="toggleChartsToggle()">
+        <span>📊 Mostra / Nascondi Grafici e Statistiche Avanzate</span>
+        <span id="chartsToggleIcon">▼</span>
+      </button>
+
+      <div id="chartsCollapsible" class="collapsible-content">
+        <div class="charts-grid">
+          <!-- GRAFICO 1: INQUILINI MESILI -->
+          <div class="chart-card">
+            <h4>👥 Numero Inquilini Totali Mese per Mese</h4>
+            <canvas id="chartTenantsMonthly"></canvas>
+          </div>
+
+          <!-- GRAFICO 2: ENTRATE VS SPESE -->
+          <div class="chart-card">
+            <h4>⚖️ Resoconto Entrate (Bonifici) vs Spese</h4>
+            <canvas id="chartIncomeExpenses"></canvas>
+          </div>
+
+          <!-- GRAFICO 3: UTENZE PRIMARIE -->
+          <div class="chart-card">
+            <h4>⚡ Andamento Utenze (Luce, Gas, Acqua)</h4>
+            <canvas id="chartUtilitiesMain"></canvas>
+          </div>
+
+          <!-- GRAFICO 4: ALTRE UTENZE E SPESE -->
+          <div class="chart-card">
+            <h4>🛠️ Andamento Utenze (Condominio, Manutenzione, Internet)</h4>
+            <canvas id="chartUtilitiesOther"></canvas>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -396,7 +472,7 @@
               </select>
             </div>
           </div>
-          <div class="field"><label>Inquilini che devono pagare *</label><div id="expenseTenantChecks" class="tenant-checks"></div></div>
+          <div class="field"><label>Inquilini che devono pagare</label><div id="expenseTenantChecks" class="tenant-checks"></div></div>
           <div class="field"><label for="expenseNotes">Note</label><textarea id="expenseNotes"></textarea></div>
           <button class="btn-primary" type="submit">Registra spesa</button>
         </form>
@@ -674,10 +750,14 @@
     window.getState = () => state;
   </script>
 
+  <!-- SCRIPT APPLICATIVO -->
   <script>
     const money = value => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
     const escapeHtml = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     const uid = prefix => prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+
+    // Istanza Grafici Chart.js globali
+    let charts = {};
 
     function formatDate(dateString) {
       if (!dateString) return "-";
@@ -756,7 +836,7 @@
       [expSelect, rmSelect, dashSelect].forEach(select => {
         if (!select) return;
         const currentVal = select.value;
-        select.innerHTML = '<option value="ALL">Tutti gli anni</option>';
+        select.innerHTML = '<option value="ALL">Da sempre (Tutti gli anni)</option>';
         years.forEach(y => {
           const opt = document.createElement("option");
           opt.value = y;
@@ -800,6 +880,19 @@
       return { expenses, payments, rentMonths, totalExpenses, totalRent, totalPaid, totalDue, balance: totalDue - totalPaid };
     }
 
+    function toggleChartsToggle() {
+      const collapsible = document.getElementById("chartsCollapsible");
+      const icon = document.getElementById("chartsToggleIcon");
+      if (collapsible.classList.contains("open")) {
+        collapsible.classList.remove("open");
+        icon.textContent = "▼";
+      } else {
+        collapsible.classList.add("open");
+        icon.textContent = "▲";
+        renderDashboardCharts(); // Genera/Aggiorna i grafici quando la tendina viene aperta
+      }
+    }
+
     function renderAll() {
       updateYearDropdowns();
       renderDashboard();
@@ -816,12 +909,10 @@
 
       document.getElementById("statTenants").textContent = state.tenants.length;
       
-      // Calcolo spese filtrate per anno
       const filteredExpenses = (state.expenses || []).filter(e => selectedYear === "ALL" || (e.date && e.date.startsWith(selectedYear)));
       document.getElementById("statExpenses").textContent = filteredExpenses.length;
       document.getElementById("statExpenseAmount").textContent = money(filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0));
 
-      // Calcolo totale ancora da ricevere per il periodo selezionato
       const totalDueOverall = state.tenants.reduce((sum, t) => {
         const summary = getTenantSummary(t, selectedYear);
         return sum + Math.max(summary.balance, 0);
@@ -832,37 +923,157 @@
       const container = document.getElementById("dashboardTenants");
       if (!state.tenants.length) {
         container.innerHTML = '<p class="empty">Nessun inquilino presente in questo appartamento.</p>';
-        return;
+      } else {
+        container.innerHTML = `
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Inquilino</th>
+                  <th>Stanza</th>
+                  <th>Totale dovuto (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                  <th>Pagato (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                  <th>Da pagare</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.tenants.map(tenant => {
+                  const summary = getTenantSummary(tenant, selectedYear);
+                  const due = Math.max(summary.balance, 0);
+                  return `
+                    <tr>
+                      <td>${escapeHtml(tenant.name)}</td>
+                      <td>${escapeHtml(tenant.room || "-")}</td>
+                      <td>${money(summary.totalDue)}</td>
+                      <td>${money(summary.totalPaid)}</td>
+                      <td class="${due > 0 ? "positive" : "negative"}">${money(due)}</td>
+                    </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>`;
       }
 
-      container.innerHTML = `
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Inquilino</th>
-                <th>Stanza</th>
-                <th>Totale dovuto (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
-                <th>Pagato (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
-                <th>Da pagare</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${state.tenants.map(tenant => {
-                const summary = getTenantSummary(tenant, selectedYear);
-                const due = Math.max(summary.balance, 0);
-                return `
-                  <tr>
-                    <td>${escapeHtml(tenant.name)}</td>
-                    <td>${escapeHtml(tenant.room || "-")}</td>
-                    <td>${money(summary.totalDue)}</td>
-                    <td>${money(summary.totalPaid)}</td>
-                    <td class="${due > 0 ? "positive" : "negative"}">${money(due)}</td>
-                  </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>`;
+      // Aggiorna i grafici se la tendina è aperta
+      if (document.getElementById("chartsCollapsible")?.classList.contains("open")) {
+        renderDashboardCharts();
+      }
+    }
+
+    // --- FUNZIONE RENDERING GRAFICI ---
+    function renderDashboardCharts() {
+      const state = window.getState ? window.getState() : { tenants: [], expenses: [], payments: [] };
+      const selectedYear = document.getElementById("yearFilterDashboard")?.value || "ALL";
+
+      // Mesi di etichetta
+      const monthsLabels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+
+      // 1. DATA: Inquilini Mensili
+      const tenantsMonthlyData = new Array(12).fill(0);
+      monthsLabels.forEach((_, monthIdx) => {
+        state.tenants.forEach(t => {
+          if (!t.contractStart || !t.contractEnd) return;
+          const startIdx = monthToIndex(t.contractStart);
+          const endIdx = monthToIndex(t.contractEnd);
+
+          if (selectedYear === "ALL") {
+            // Conta per tutti i mesi dello storico
+            tenantsMonthlyData[monthIdx]++;
+          } else {
+            const targetMonthIdx = Number(selectedYear) * 12 + monthIdx;
+            if (targetMonthIdx >= startIdx && targetMonthIdx <= endIdx) {
+              tenantsMonthlyData[monthIdx]++;
+            }
+          }
+        });
+      });
+
+      // 2. DATA: Entrate vs Spese
+      const incomeData = new Array(12).fill(0);
+      const expenseData = new Array(12).fill(0);
+
+      (state.payments || []).forEach(p => {
+        if (!p.date) return;
+        const [y, m] = p.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12) incomeData[m - 1] += Number(p.amount || 0);
+        }
+      });
+
+      (state.expenses || []).forEach(e => {
+        if (!e.date) return;
+        const [y, m] = e.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12) expenseData[m - 1] += Number(e.amount || 0);
+        }
+      });
+
+      // 3 & 4. DATA: Utenze per Categoria
+      const catData = { Luce: new Array(12).fill(0), Gas: new Array(12).fill(0), Acqua: new Array(12).fill(0), Condominio: new Array(12).fill(0), Manutenzione: new Array(12).fill(0), Internet: new Array(12).fill(0) };
+
+      (state.expenses || []).forEach(e => {
+        if (!e.date || !e.category) return;
+        const [y, m] = e.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12 && catData[e.category]) {
+            catData[e.category][m - 1] += Number(e.amount || 0);
+          }
+        }
+      });
+
+      // DISTRUZIONE GRAFICI PRECEDENTI (Reset)
+      Object.keys(charts).forEach(key => { if (charts[key]) charts[key].destroy(); });
+
+      // GRAFICO 1: INQUILINI
+      charts.tenants = new Chart(document.getElementById("chartTenantsMonthly"), {
+        type: "bar",
+        data: {
+          labels: monthsLabels,
+          datasets: [{ label: "Inquilini Attivi", data: tenantsMonthlyData, backgroundColor: "#2563eb", borderRadius: 4 }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+      });
+
+      // GRAFICO 2: ENTRATE VS SPESE
+      charts.incomeExpenses = new Chart(document.getElementById("chartIncomeExpenses"), {
+        type: "bar",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Entrate (Bonifici)", data: incomeData, backgroundColor: "#16a34a", borderRadius: 4 },
+            { label: "Spese Totali", data: expenseData, backgroundColor: "#dc2626", borderRadius: 4 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+
+      // GRAFICO 3: UTENZE PRIMARIE (LUCE, GAS, ACQUA)
+      charts.utilitiesMain = new Chart(document.getElementById("chartUtilitiesMain"), {
+        type: "line",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Luce", data: catData.Luce, borderColor: "#eab308", backgroundColor: "#fef08a", tension: 0.3 },
+            { label: "Gas", data: catData.Gas, borderColor: "#f97316", backgroundColor: "#ffedd5", tension: 0.3 },
+            { label: "Acqua", data: catData.Acqua, borderColor: "#0284c7", backgroundColor: "#e0f2fe", tension: 0.3 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+
+      // GRAFICO 4: ALTRE UTENZE (CONDOMINIO, MANUTENZIONE, INTERNET)
+      charts.utilitiesOther = new Chart(document.getElementById("chartUtilitiesOther"), {
+        type: "line",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Condominio", data: catData.Condominio, borderColor: "#8b5cf6", backgroundColor: "#f3e8ff", tension: 0.3 },
+            { label: "Manutenzione", data: catData.Manutenzione, borderColor: "#64748b", backgroundColor: "#f1f5f9", tension: 0.3 },
+            { label: "Internet", data: catData.Internet, borderColor: "#06b6d4", backgroundColor: "#cffaff", tension: 0.3 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
     }
 
     function renderTenantChecks() {
@@ -938,7 +1149,7 @@
                     <td><strong>${escapeHtml(expense.description)}</strong>${expense.notes ? `<br><small>${escapeHtml(expense.notes)}</small>` : ""}</td>
                     <td>${escapeHtml(expense.category || "-")}</td>
                     <td>${money(expense.amount)}</td>
-                    <td>${names.map(escapeHtml).join("<br>")}</td>
+                    <td>${names.length ? names.map(escapeHtml).join("<br>") : "<small class='muted'>Generale</small>"}</td>
                     <td>${money(share)}</td>
                     <td class="actions-cell">
                       <button class="btn-whatsapp" onclick="sendExpenseWhatsApp('${expense.id}')" title="Notifica su WhatsApp">📱 Condividi</button>
@@ -998,20 +1209,13 @@
 
     function deleteAnnualDataPrompt() {
       const years = getAvailableYears();
-      if (!years.length) {
-        alert("Non ci sono dati disponibili da eliminare.");
-        return;
-      }
+      if (!years.length) { alert("Non ci sono dati disponibili da eliminare."); return; }
 
       const yearToDelete = prompt(`Inserisci l'anno per cui desideri ELIMINARE TUTTI I DATI (Spese e Bonifici).\n\nAnni disponibili: ${years.join(", ")}`);
-      
       if (!yearToDelete) return;
 
       const cleanYear = yearToDelete.trim();
-      if (!/^\d{4}$/.test(cleanYear)) {
-        alert("Inserisci un anno valido nel formato AAAA (es. 2024).");
-        return;
-      }
+      if (!/^\d{4}$/.test(cleanYear)) { alert("Inserisci un anno valido nel formato AAAA (es. 2024)."); return; }
 
       const state = window.getState();
       const expensesToDelete = (state.expenses || []).filter(e => e.date && e.date.startsWith(cleanYear));
@@ -1048,8 +1252,8 @@
       msg += `💶 *Importo totale:* ${money(expense.amount)}\n`;
       msg += `📅 *Data:* ${formatDate(expense.date)}\n`;
       if (expense.category) msg += `🏷️ *Categoria:* ${expense.category}\n`;
-      msg += `\n👥 *Inquilini coinvolti:* ${tenantNames.join(", ")}\n`;
-      msg += `👉 *Quota a persona:* ${money(share)}\n`;
+      msg += `\n👥 *Inquilini coinvolti:* ${tenantNames.length ? tenantNames.join(", ") : "Nessuno (Spesa generale)"}\n`;
+      if (tenantNames.length) msg += `👉 *Quota a persona:* ${money(share)}\n`;
       if (expense.notes) msg += `\n📝 *Note:* ${expense.notes}\n`;
 
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
@@ -1140,7 +1344,7 @@
                 description: cols[2],
                 category: cols[3],
                 amount: parseFloat(cols[4]) || 0,
-                tenantIds: cols[5] ? cols[5].split(",") : [],
+                tenantIds: cols[5] ? cols[5].split(",").filter(x => x) : [],
                 notes: cols[6] || ""
               });
             } else if (currentSection === "payments" && cols.length >= 6) {
@@ -1197,8 +1401,6 @@
     document.getElementById("expenseForm").addEventListener("submit", function(e) {
       e.preventDefault();
       const state = window.getState();
-      
-      // Raccoglie gli ID degli inquilini selezionati (se ve ne sono)
       const tenantIds = [...document.querySelectorAll('input[name="expenseTenants"]:checked')].map(i => i.value);
 
       state.expenses.push({
@@ -1207,10 +1409,9 @@
         amount: Number(document.getElementById("expenseAmount").value),
         date: document.getElementById("expenseDate").value,
         category: document.getElementById("expenseCategory").value,
-        tenantIds: tenantIds, // Può essere anche un array vuoto []
+        tenantIds: tenantIds,
         notes: document.getElementById("expenseNotes").value.trim()
       });
-
       this.reset();
       window.save();
     });
@@ -1279,6 +1480,7 @@
       window.open(`https://wa.me/${tenant.phone}?text=${encodeURIComponent(msg)}`, "_blank");
     }
 
+    window.toggleChartsToggle = toggleChartsToggle;
     window.exportDataToCSV = exportDataToCSV;
     window.importDataFromCSV = importDataFromCSV;
     window.deleteAnnualDataPrompt = deleteAnnualDataPrompt;
