@@ -265,13 +265,18 @@
       <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
       
       <!-- Selettore Istanza / Appartamento -->
-      <div class="property-selector" id="propertySelectorContainer">
-        <span id="activePropertyName" class="active-property-name">Appartamento</span>
-        <select id="propertySelect" onchange="switchProperty(this.value)"></select>
-        <button class="btn-secondary" onclick="renameCurrentProperty()" title="Rinomina appartamento selezionato">✏️ Modifica nome</button>
-        <button class="btn-primary" onclick="createNewProperty()">+ Nuovo Appartamento</button>
-        <button class="btn-danger" onclick="deleteCurrentProperty()" title="Elimina appartamento selezionato">🗑️</button>
-      </div>
+        <div class="property-selector" id="propertySelectorContainer">
+          <span id="activePropertyName" class="active-property-name">Appartamento</span>
+          <select id="propertySelect" onchange="switchProperty(this.value)"></select>
+          <button class="btn-secondary" onclick="renameCurrentProperty()" title="Rinomina appartamento selezionato">✏️ Modifica nome</button>
+          <button class="btn-primary" onclick="createNewProperty()">+ Nuovo Appartamento</button>
+          <button class="btn-secondary" onclick="exportDataToCSV()" title="Esporta dati in CSV/Foglio di calcolo">📥 Esporta</button>
+          <button class="btn-secondary" onclick="document.getElementById('importFileInput').click()" title="Importa dati da CSV">📤 Importa</button>
+          <input type="file" id="importFileInput" accept=".csv" style="display: none;" onchange="importDataFromCSV(event)">
+          <button class="btn-danger" onclick="deleteCurrentProperty()" title="Elimina appartamento selezionato">🗑️</button>
+        </div>
+
+
     </div>
 
     <nav>
@@ -607,6 +612,146 @@
     const escapeHtml = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     const uid = prefix => prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
 
+    // --- ESPORTAZIONE IN FOGLIO DI CALCOLO (CSV / ODS / EXCEL) ---
+function exportDataToCSV() {
+  const state = window.getState();
+  if (!state) {
+    alert("Nessun dato disponibile da esportare.");
+    return;
+  }
+
+  const propName = document.getElementById("activePropertyName")?.textContent || "Appartamento";
+  let csvContent = "\uFEFF"; // Byte Order Mark per la corretta gestione di accenti e caratteri speciali in LibreOffice e Excel
+
+  // 1. SEZIONE INQUILINI
+  csvContent += "=== INQUILINI ===\n";
+  csvContent += "ID;Nome;Telefono;Stanza;Affitto Mensile;Inizio Contratto;Fine Contratto;Note\n";
+  (state.tenants || []).forEach(t => {
+    csvContent += `"${t.id}";"${t.name || ''}";"${t.phone || ''}";"${t.room || ''}";"${t.monthlyRent || 0}";"${t.contractStart || ''}";"${t.contractEnd || ''}";"${(t.notes || '').replace(/"/g, '""')}"\n`;
+  });
+
+  csvContent += "\n";
+
+  // 2. SEZIONE SPESE
+  csvContent += "=== SPESE APPARTAMENTO ===\n";
+  csvContent += "ID;Data;Causale;Categoria;Importo Totale;ID Inquilini Coinvolti;Note\n";
+  (state.expenses || []).forEach(e => {
+    const tenantIdsStr = (e.tenantIds || []).join(",");
+    csvContent += `"${e.id}";"${e.date || ''}";"${(e.description || '').replace(/"/g, '""')}";"${e.category || ''}";"${e.amount || 0}";"${tenantIdsStr}";"${(e.notes || '').replace(/"/g, '""')}"\n`;
+  });
+
+  csvContent += "\n";
+
+  // 3. SEZIONE BONIFICI
+  csvContent += "=== BONIFICI INQUILINI ===\n";
+  csvContent += "ID;ID Inquilino;Nome Inquilino;Data;Causale;Importo;Note\n";
+  (state.payments || []).forEach(p => {
+    const tenant = (state.tenants || []).find(t => t.id === p.tenantId);
+    const tenantName = tenant ? tenant.name : "Sconosciuto";
+    csvContent += `"${p.id}";"${p.tenantId || ''}";"${tenantName}";"${p.date || ''}";"${(p.description || '').replace(/"/g, '""')}";"${p.amount || 0}";"${(p.notes || '').replace(/"/g, '""')}"\n`;
+  });
+
+  // Download del file
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const fileName = `${propName.toLowerCase().replace(/\s+/g, '_')}_dati_${new Date().toISOString().slice(0, 10)}.csv`;
+  
+  link.setAttribute("href", url);
+  link.setAttribute("download", fileName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// --- IMPORTAZIONE DA FOGLIO DI CALCOLO (CSV) ---
+function importDataFromCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text = e.target.result;
+      const lines = text.split(/\r\n|\n/);
+      
+      let currentSection = "";
+      const newTenants = [];
+      const newExpenses = [];
+      const newPayments = [];
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        if (trimmed.includes("=== INQUILINI ===")) { currentSection = "tenants"; return; }
+        if (trimmed.includes("=== SPESE APPARTAMENTO ===")) { currentSection = "expenses"; return; }
+        if (trimmed.includes("=== BONIFICI INQUILINI ===")) { currentSection = "payments"; return; }
+
+        // Ignora le intestazioni delle colonne
+        if (trimmed.startsWith("ID;")) return;
+
+        // Parsing dei valori separati da punto e comma (;)
+        const cols = trimmed.split(';').map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"'));
+
+        if (currentSection === "tenants" && cols.length >= 7) {
+          newTenants.push({
+            id: cols[0] || "tenant_" + Date.now(),
+            name: cols[1],
+            phone: cols[2],
+            room: cols[3],
+            monthlyRent: parseFloat(cols[4]) || 0,
+            contractStart: cols[5],
+            contractEnd: cols[6],
+            notes: cols[7] || ""
+          });
+        } else if (currentSection === "expenses" && cols.length >= 6) {
+          newExpenses.push({
+            id: cols[0] || "expense_" + Date.now(),
+            date: cols[1],
+            description: cols[2],
+            category: cols[3],
+            amount: parseFloat(cols[4]) || 0,
+            tenantIds: cols[5] ? cols[5].split(",") : [],
+            notes: cols[6] || ""
+          });
+        } else if (currentSection === "payments" && cols.length >= 6) {
+          newPayments.push({
+            id: cols[0] || "payment_" + Date.now(),
+            tenantId: cols[1],
+            date: cols[3],
+            description: cols[4],
+            amount: parseFloat(cols[5]) || 0,
+            notes: cols[6] || ""
+          });
+        }
+      });
+
+      if (confirm(`Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese e ${newPayments.length} bonifici. Vuoi sovrascrivere i dati dell'appartamento corrente con questi?`)) {
+        const state = window.getState();
+        state.tenants = newTenants;
+        state.expenses = newExpenses;
+        state.payments = newPayments;
+
+        window.save();
+        if (typeof window.renderAll === "function") window.renderAll();
+        alert("Importazione completata con successo!");
+      }
+    } catch (err) {
+      alert("Errore durante l'importazione del file: " + err.message);
+    }
+  };
+
+  reader.readAsText(file, "UTF-8");
+  event.target.value = ""; // Reset dell'input
+}
+
+// Esponi le funzioni globalmente
+window.exportDataToCSV = exportDataToCSV;
+window.importDataFromCSV = importDataFromCSV;
+
+
+    
     function formatDate(dateString) {
       if (!dateString) return "-";
       const parts = dateString.split("-");
