@@ -1315,58 +1315,66 @@
           const newPayments = [];
 
           lines.forEach(line => {
-            const trimmed = line.trim();
+            let trimmed = line.trim();
             if (!trimmed) return;
 
+            // Riconoscimento Sezioni
             if (trimmed.includes("=== INQUILINI ===")) { currentSection = "tenants"; return; }
             if (trimmed.includes("=== SPESE APPARTAMENTO ===")) { currentSection = "expenses"; return; }
             if (trimmed.includes("=== BONIFICI INQUILINI ===")) { currentSection = "payments"; return; }
 
-            if (trimmed.startsWith("ID;")) return;
+            // Salta le intestazioni delle colonne
+            if (trimmed.startsWith("ID;") || trimmed.startsWith("ID Inquilino") || trimmed.startsWith("Nome;")) return;
 
-            const cols = trimmed.split(';').map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"'));
+            // Pulizia delle virgolette e split per punto e virgola
+            const cols = trimmed.split(';').map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
 
-            if (currentSection === "tenants" && cols.length >= 7) {
+            if (currentSection === "tenants" && cols.length >= 5) {
               newTenants.push({
-                id: cols[0] || "tenant_" + Date.now(),
-                name: cols[1],
-                phone: cols[2],
-                room: cols[3],
+                id: cols[0] || "tenant_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                name: cols[1] || "",
+                phone: cols[2] || "",
+                room: cols[3] || "",
                 monthlyRent: parseFloat(cols[4]) || 0,
-                contractStart: cols[5],
-                contractEnd: cols[6],
+                contractStart: cols[5] || "",
+                contractEnd: cols[6] || "",
                 notes: cols[7] || ""
               });
-            } else if (currentSection === "expenses" && cols.length >= 6) {
+            } else if (currentSection === "expenses" && cols.length >= 4) {
               newExpenses.push({
-                id: cols[0] || "expense_" + Date.now(),
-                date: cols[1],
-                description: cols[2],
-                category: cols[3],
+                id: cols[0] || "expense_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                date: cols[1] || "",
+                description: cols[2] || "",
+                category: cols[3] || "Altro",
                 amount: parseFloat(cols[4]) || 0,
-                tenantIds: cols[5] ? cols[5].split(",").filter(x => x) : [],
+                tenantIds: cols[5] ? cols[5].split(",").map(x => x.trim()).filter(x => x) : [],
                 notes: cols[6] || ""
               });
-            } else if (currentSection === "payments" && cols.length >= 6) {
+            } else if (currentSection === "payments" && cols.length >= 4) {
               newPayments.push({
-                id: cols[0] || "payment_" + Date.now(),
-                tenantId: cols[1],
-                date: cols[3],
-                description: cols[4],
+                id: cols[0] || "payment_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                tenantId: cols[1] || "",
+                date: cols[3] || cols[2] || "",
+                description: cols[4] || "",
                 amount: parseFloat(cols[5]) || 0,
                 notes: cols[6] || ""
               });
             }
           });
 
-          if (confirm(`Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese e ${newPayments.length} bonifici. Vuoi sovrascrivere i dati dell'appartamento corrente con questi?`)) {
+          if (newTenants.length === 0 && newExpenses.length === 0 && newPayments.length === 0) {
+            alert("Nessun dato valido trovato nel file. Verificare che il file sia salvato in formato CSV con separatore punto e virgola (;).");
+            return;
+          }
+
+          if (confirm(`Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese e ${newPayments.length} bonifici.\n\nVuoi sovrascrivere i dati dell'appartamento corrente con questi?`)) {
             const state = window.getState();
             state.tenants = newTenants;
             state.expenses = newExpenses;
             state.payments = newPayments;
 
             window.save();
-            alert("Importazione completata!");
+            alert("Importazione completata con successo!");
           }
         } catch (err) {
           alert("Errore durante l'importazione: " + err.message);
@@ -1376,61 +1384,6 @@
       reader.readAsText(file, "UTF-8");
       event.target.value = "";
     }
-
-    document.getElementById("tenantForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const state = window.getState();
-      const start = document.getElementById("tenantStart").value;
-      const end = document.getElementById("tenantEnd").value;
-      if (monthToIndex(end) < monthToIndex(start)) { alert("La fine del contratto non può precedere l'inizio."); return; }
-
-      state.tenants.push({
-        id: uid("tenant"),
-        name: document.getElementById("tenantName").value.trim(),
-        phone: normalizePhone(document.getElementById("tenantPhone").value),
-        room: document.getElementById("tenantRoom").value.trim(),
-        monthlyRent: Number(document.getElementById("tenantRent").value),
-        contractStart: start,
-        contractEnd: end,
-        notes: document.getElementById("tenantNotes").value.trim()
-      });
-      this.reset();
-      window.save();
-    });
-
-    document.getElementById("expenseForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const state = window.getState();
-      const tenantIds = [...document.querySelectorAll('input[name="expenseTenants"]:checked')].map(i => i.value);
-
-      state.expenses.push({
-        id: uid("expense"),
-        description: document.getElementById("expenseDescription").value.trim(),
-        amount: Number(document.getElementById("expenseAmount").value),
-        date: document.getElementById("expenseDate").value,
-        category: document.getElementById("expenseCategory").value,
-        tenantIds: tenantIds,
-        notes: document.getElementById("expenseNotes").value.trim()
-      });
-      this.reset();
-      window.save();
-    });
-
-    document.getElementById("paymentForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const state = window.getState();
-      state.payments.push({
-        id: uid("payment"),
-        tenantId: document.getElementById("paymentTenantId").value,
-        date: document.getElementById("paymentDate").value,
-        amount: Number(document.getElementById("paymentAmount").value),
-        description: document.getElementById("paymentDescription").value.trim(),
-        notes: document.getElementById("paymentNotes").value.trim()
-      });
-      closePaymentModal();
-      this.reset();
-      window.save();
-    });
 
     function deleteTenant(id) {
       const state = window.getState();
