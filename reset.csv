@@ -1,0 +1,8 @@
+=== INQUILINI ===
+ID;Nome;Telefono;Stanza;Affitto Mensile;Inizio Contratto;Fine Contratto;Note
+
+=== SPESE APPARTAMENTO ===
+ID;Data;Causale;Categoria;Importo Totale;ID Inquilini Coinvolti;Note
+
+=== BONIFICI INQUILINI ===
+ID;ID Inquilino;Nome Inquilino;Data;Causale;Importo;Note
