@@ -86,4 +86,20 @@ Caratteristiche principali e struttura:
   3. Utenze primarie: Luce, Gas, Acqua (Grafico a linee con colori dedicati).
   4. Altre spese: Condominio, Manutenzione, Internet (Grafico a linee).
 
+---------------------------------------------------------------------------------------------------
+
+Riepilogo delle modifiche apportate:
+Sezione Spese ("Elenco Spese"): 
+- L'elenco delle spese è stato trasformato in una scheda espandibile/chiudibile (accordion).
+- È stata aggiunta la freccia di stato (▲ / ▼) allineata e formattata a destra.
+
+Sezione Stanze:
+- I riquadri dei singoli inquilini sono ora espandibili e chiudibili cliccando sulla relativa intestazione.
+- Tutti gli elenchi interni (Spese personali, Mensilità di affitto, Bonifici effettuati) sono ora sotto-menu chiudibili individualmente.
+- Tutte le frecce di stato sono posizionate sul margine destro e allineate ai rispettivi titoli.
+
+Dashboard - Grafici Utenze:
+- I valori zero nei mesi privi di spese/bollette sono stati convertiti in null.
+- È stata abilitata la proprietà spanGaps: true su tutti i dataset dei grafici a linee delle utenze primarie ed secondarie, così da collegare unicamente i punti di spesa effettivi senza far scendere le linee a 0.
+
 ================================================================================
