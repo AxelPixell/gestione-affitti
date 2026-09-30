@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestione affitto condiviso</title>
+
+  <!-- Chart.js per i grafici -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #15803d;
+      --danger: #dc2626;
+      --warning: #b45309;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --border: #d1d5db;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --whatsapp: #16a34a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 20px;
+    }
+
+    header h1 { margin: 0 0 15px; font-size: 25px; }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .property-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #1f2937;
+      padding: 8px 12px;
+      border-radius: 8px;
+      flex-wrap: wrap;
+    }
+
+    .active-property-name {
+      color: #60a5fa;
+      font-weight: bold;
+      font-size: 16px;
+      margin-right: 5px;
+    }
+
+    .property-selector select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: #374151;
+      color: white;
+      border: 1px solid #4b5563;
+      max-width: 200px;
+    }
+
+    nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    nav button {
+      border: 0;
+      background: #374151;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    nav button:hover, nav button.active { background: var(--primary); }
+
+    main {
+      max-width: 1350px;
+      margin: 25px auto;
+      padding: 0 16px 40px;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .card {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+
+    .card h2, .card h3 { margin-top: 0; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 15px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 15px;
+      background: white;
+    }
+
+    textarea { resize: vertical; min-height: 80px; }
+    .field { margin-bottom: 14px; }
+
+    button {
+      border: 0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-secondary { background: #6b7280; color: white; }
+    .btn-whatsapp { background: var(--whatsapp); color: white; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 15px; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      background: white;
+      padding: 18px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+
+    .stat small { color: var(--muted); display: block; margin-bottom: 8px; }
+    .stat strong { font-size: 23px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: white;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th { background: #f9fafb; font-size: 13px; }
+    td.actions-cell { white-space: nowrap; }
+    .table-wrapper { overflow-x: auto; }
+
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: #f8fafc;
+      padding: 12px 15px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 15px;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-group select {
+      padding: 6px 12px;
+      font-size: 14px;
+      width: auto;
+    }
+
+    .collapsible-btn {
+      width: 100%;
+      background: #374151;
+      color: white;
+      text-align: left;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 14px 18px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-bottom: 15px;
+    }
+
+    .collapsible-btn:hover { background: #1f2937; }
+
+    /* Custom headers and sub-accordions with right-aligned arrows */
+    .collapsible-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .collapsible-header h2,
+    .collapsible-header h3 {
+      margin: 0;
+      flex-grow: 1;
+    }
+
+    .collapsible-header .arrow-icon {
+      font-size: 18px;
+      font-weight: bold;
+      margin-left: 15px;
+      transition: transform 0.2s ease;
+      color: #4b5563;
+    }
+
+    .collapsible-btn .arrow-icon {
+      color: white;
+    }
+
+    .sub-collapsible-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-top: 20px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 8px;
+      user-select: none;
+    }
+
+    .sub-collapsible-header h3 {
+      margin: 0;
+    }
+
+    .collapsible-content {
+      display: none;
+      margin-top: 15px;
+    }
+
+    .collapsible-content.open { display: block; }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
+    }
+
+    .chart-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(0,0,0,.04);
+    }
+
+    .chart-card h4 { margin: 0 0 10px 0; font-size: 15px; color: var(--text); }
+
+    .tenant-checks {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .check-item {
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: normal;
+      cursor: pointer;
+    }
+
+    .check-item input { width: auto; margin-right: 7px; }
+
+    .tenant-card { border-left: 5px solid var(--primary); }
+    .tenant-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .tenant-card-title {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .badge-danger { color: #991b1b; background: #fee2e2; }
+    .badge-success { color: #166534; background: #dcfce7; }
+    .positive { color: var(--danger); font-weight: bold; }
+    .negative { color: var(--success); font-weight: bold; }
+    .empty { color: var(--muted); padding: 15px 0; }
+    .muted { color: var(--muted); }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 15px;
+      z-index: 10;
+    }
+
+    .modal.open { display: flex; }
+
+    .modal-content {
+      background: white;
+      border-radius: 10px;
+      padding: 22px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .close { float: right; background: transparent; font-size: 22px; padding: 0; }
+
+    .status-cloud {
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 15px;
+      background: #374151;
+      display: inline-block;
+      margin-left: 10px;
+    }
+
+    @media (max-width: 600px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="header-bar">
+      <h1>Gestione affitto condiviso <span id="syncStatus" class="status-cloud">Caricamento...</span></h1>
+      
+      <!-- Selettore Istanza / Appartamento -->
+      <div class="property-selector" id="propertySelectorContainer">
+        <span id="activePropertyName" class="active-property-name">Appartamento</span>
+        <select id="propertySelect" onchange="switchProperty(this.value)"></select>
+        <button class="btn-secondary" onclick="renameCurrentProperty()" title="Rinomina appartamento selezionato">✏️ Modifica nome</button>
+        <button class="btn-primary" onclick="createNewProperty()">+ Nuovo Appartamento</button>
+        <button class="btn-secondary" onclick="exportDataToCSV()" title="Esporta dati in CSV/Foglio di calcolo">📥 Esporta</button>
+        <button class="btn-secondary" onclick="document.getElementById('importFileInput').click()" title="Importa dati da CSV">📤 Importa</button>
+        <input type="file" id="importFileInput" accept=".csv" style="display: none;" onchange="importDataFromCSV(event)">
+        <button class="btn-danger" onclick="deleteCurrentProperty()" title="Elimina appartamento selezionato">🗑️</button>
+      </div>
+    </div>
+
+    <nav>
+      <button data-page="dashboard" class="active">Dashboard</button>
+      <button data-page="tenants">Inquilini</button>
+      <button data-page="expenses">Spese</button>
+      <button data-page="rooms">Stanze</button>
+      
+      <!-- Pulsanti Login / Logout -->
+      <button id="loginBtn" onclick="login()" class="btn-success" style="margin-left: auto;">Accedi con Google</button>
+      <button id="logoutBtn" onclick="logout()" class="btn-secondary" style="display: none;">Esci</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="page active">
+      <div class="stats">
+        <div class="stat"><small>Inquilini attivi</small><strong id="statTenants">0</strong></div>
+        <div class="stat"><small>Spese registrate</small><strong id="statExpenses">0</strong></div>
+        <div class="stat"><small>Totale spese</small><strong id="statExpenseAmount">€ 0,00</strong></div>
+        <div class="stat"><small>Totale da ricevere</small><strong id="statDue">€ 0,00</strong></div>
+      </div>
+
+      <!-- TENDINA GRAFICI STATISTICI -->
+      <button type="button" class="collapsible-btn" onclick="toggleChartsToggle()">
+        <span>📊 Mostra / Nascondi Grafici e Statistiche Avanzate</span>
+        <span id="chartsToggleIcon" class="arrow-icon">▼</span>
+      </button>
+
+      <div id="chartsCollapsible" class="collapsible-content">
+        <div class="charts-grid">
+          <!-- GRAFICO 1: INQUILINI MESILI -->
+          <div class="chart-card">
+            <h4>👥 Numero Inquilini Totali Mese per Mese</h4>
+            <canvas id="chartTenantsMonthly"></canvas>
+          </div>
+
+          <!-- GRAFICO 2: ENTRATE VS SPESE -->
+          <div class="chart-card">
+            <h4>⚖️ Resoconto Entrate (Bonifici) vs Spese</h4>
+            <canvas id="chartIncomeExpenses"></canvas>
+          </div>
+
+          <!-- GRAFICO 3: UTENZE PRIMARIE -->
+          <div class="chart-card">
+            <h4>⚡ Andamento Utenze (Luce, Gas, Acqua)</h4>
+            <canvas id="chartUtilitiesMain"></canvas>
+          </div>
+
+          <!-- GRAFICO 4: ALTRE UTENZE E SPESE -->
+          <div class="chart-card">
+            <h4>🛠️ Andamento Utenze (Condominio, Manutenzione, Internet)</h4>
+            <canvas id="chartUtilitiesOther"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Situazione inquilini</h2>
+        
+        <!-- BARRA FILTRO ANNO IN DASHBOARD -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="yearFilterDashboard" style="margin: 0;">📅 Filtra situazione per anno:</label>
+            <select id="yearFilterDashboard" onchange="renderDashboard()">
+              <option value="ALL">Da sempre (Tutti gli anni)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="dashboardTenants"></div>
+      </div>
+    </section>
+
+    <!-- INQUILINI -->
+    <section id="tenants" class="page">
+      <div class="card">
+        <h2>Aggiungi inquilino</h2>
+        <form id="tenantForm">
+          <div class="grid">
+            <div class="field"><label for="tenantName">Nome e cognome *</label><input id="tenantName" required></div>
+            <div class="field"><label for="tenantPhone">Numero WhatsApp</label><input id="tenantPhone" placeholder="393331234567"></div>
+            <div class="field"><label for="tenantRoom">Stanza</label><input id="tenantRoom" placeholder="Es. 2"></div>
+            <div class="field"><label for="tenantRent">Affitto mensile *</label><input id="tenantRent" type="number" min="0" step="0.01" required></div>
+            <div class="field"><label for="tenantStart">Data inizio contratto *</label><input id="tenantStart" type="date" required></div>
+            <div class="field"><label for="tenantEnd">Data fine contratto *</label><input id="tenantEnd" type="date" required></div>
+          </div>
+          <div class="field"><label for="tenantNotes">Note</label><textarea id="tenantNotes"></textarea></div>
+          <button class="btn-primary" type="submit">Aggiungi inquilino</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Elenco inquilini</h2>
+        <div id="tenantsList"></div>
+      </div>
+    </section>
+
+    <!-- SPESE -->
+    <section id="expenses" class="page">
+      <div class="card">
+        <h2>Aggiungi spesa</h2>
+        <form id="expenseForm">
+          <div class="grid">
+            <div class="field"><label for="expenseDescription">Causale *</label><input id="expenseDescription" required placeholder="Es. Bolletta luce"></div>
+            <div class="field"><label for="expenseAmount">Importo totale *</label><input id="expenseAmount" type="number" min="0" step="0.01" required></div>
+            <div class="field"><label for="expenseDate">Data *</label><input id="expenseDate" type="date" required></div>
+            <div class="field">
+              <label for="expenseCategory">Categoria</label>
+              <select id="expenseCategory">
+                <option value="Luce">Luce</option>
+                <option value="Gas">Gas</option>
+                <option value="Acqua">Acqua</option>
+                <option value="Internet">Internet</option>
+                <option value="Pulizie">Pulizie</option>
+                <option value="Manutenzione">Manutenzione</option>
+                <option value="Condominio">Condominio</option>
+                <option value="Altro">Altro</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label>Inquilini che devono pagare</label><div id="expenseTenantChecks" class="tenant-checks"></div></div>
+          <div class="field"><label for="expenseNotes">Note</label><textarea id="expenseNotes"></textarea></div>
+          <button class="btn-primary" type="submit">Registra spesa</button>
+        </form>
+      </div>
+
+      <!-- SEZIONE ELENCO SPESE COLLAPSIBLE -->
+      <div class="card">
+        <div class="collapsible-header" onclick="toggleSection('expensesListContent', 'expensesListArrow')">
+          <h2 style="margin: 0;">Elenco spese</h2>
+          <span id="expensesListArrow" class="arrow-icon">▲</span>
+        </div>
+        
+        <div id="expensesListContent" class="collapsible-content open">
+          <!-- BARRA FILTRO E GESTIONE ANNI -->
+          <div class="filter-bar" style="margin-top: 15px;">
+            <div class="filter-group">
+              <label for="yearFilterExpenses" style="margin: 0;">📅 Filtra per anno:</label>
+              <select id="yearFilterExpenses" onchange="renderExpenses()">
+                <option value="ALL">Tutti gli anni</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <button class="btn-danger" onclick="deleteAnnualDataPrompt()" title="Elimina in blocco spese e bonifici per un anno specifico">🗑️ Elimina per anno</button>
+            </div>
+          </div>
+
+          <div id="expensesList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STANZE -->
+    <section id="rooms" class="page">
+      <div class="card" style="margin-bottom: 15px;">
+        <div class="filter-bar" style="margin: 0;">
+          <div class="filter-group">
+            <label for="yearFilterRooms" style="margin: 0;">📅 Filtra dettagli stanze per anno:</label>
+            <select id="yearFilterRooms" onchange="renderRooms()">
+              <option value="ALL">Tutti gli anni</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="roomsList"></div>
+    </section>
+  </main>
+
+  <!-- MODALE BONIFICO -->
+  <div id="paymentModal" class="modal">
+    <div class="modal-content">
+      <button class="close" onclick="closePaymentModal()">×</button>
+      <h2>Registra bonifico</h2>
+      <p id="paymentTenantLabel" class="muted"></p>
+      <form id="paymentForm">
+        <input type="hidden" id="paymentTenantId">
+        <div class="field"><label for="paymentDate">Data *</label><input id="paymentDate" type="date" required></div>
+        <div class="field"><label for="paymentAmount">Importo *</label><input id="paymentAmount" type="number" min="0" step="0.01" required></div>
+        <div class="field"><label for="paymentDescription">Causale *</label><input id="paymentDescription" required placeholder="Es. Affitto novembre"></div>
+        <div class="field"><label for="paymentNotes">Note</label><textarea id="paymentNotes"></textarea></div>
+        <div class="actions">
+          <button class="btn-primary" type="submit">Salva bonifico</button>
+          <button class="btn-secondary" type="button" onclick="closePaymentModal()">Annulla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBuyOBhjDdxHi92mETmrrAKx69Rf78tInc",
+      authDomain: "pagamenti-kennedy-51.firebaseapp.com",
+      projectId: "pagamenti-kennedy-51",
+      storageBucket: "pagamenti-kennedy-51.firebasestorage.app",
+      messagingSenderId: "990570367263",
+      appId: "1:990570367263:web:4fe06666780660a10a482a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    let currentUser = null;
+    let unsubscribe = null;
+
+    let rootData = {
+      activePropertyId: null,
+      properties: {}
+    };
+
+    let state = { tenants: [], expenses: [], payments: [] };
+
+    onAuthStateChanged(auth, (user) => {
+      const syncStatus = document.getElementById("syncStatus");
+      const loginBtn = document.getElementById("loginBtn");
+      const logoutBtn = document.getElementById("logoutBtn");
+
+      if (user) {
+        currentUser = user;
+        syncStatus.textContent = `🟢 Utente: ${user.displayName || user.email}`;
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "inline-block";
+
+        const userDocRef = doc(db, "users", user.uid);
+
+        if (unsubscribe) unsubscribe();
+        unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.tenants && !data.properties) {
+              const defaultId = "prop_" + Date.now();
+              rootData = {
+                activePropertyId: defaultId,
+                properties: {
+                  [defaultId]: {
+                    name: "Appartamento 1",
+                    tenants: data.tenants || [],
+                    expenses: data.expenses || [],
+                    payments: data.payments || []
+                  }
+                }
+              };
+              saveCloud();
+            } else {
+              rootData = data;
+            }
+          } else {
+            const defaultId = "prop_" + Date.now();
+            rootData = {
+              activePropertyId: defaultId,
+              properties: {
+                [defaultId]: {
+                  name: "Appartamento 1",
+                  tenants: [],
+                  expenses: [],
+                  payments: []
+                }
+              }
+            };
+            saveCloud();
+          }
+
+          updatePropertyDropdown();
+          loadActivePropertyState();
+          if (typeof window.renderAll === "function") window.renderAll();
+        }, (error) => {
+          console.error("Errore sync:", error);
+          syncStatus.textContent = "🔴 Errore caricamento dati";
+        });
+
+      } else {
+        currentUser = null;
+        rootData = { activePropertyId: null, properties: {} };
+        state = { tenants: [], expenses: [], payments: [] };
+        if (unsubscribe) unsubscribe();
+        syncStatus.textContent = "🔒 Accedi per salvare i dati";
+        loginBtn.style.display = "inline-block";
+        logoutBtn.style.display = "none";
+        if (typeof window.renderAll === "function") window.renderAll();
+      }
+    });
+
+    function loadActivePropertyState() {
+      if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
+        state = rootData.properties[rootData.activePropertyId];
+      } else {
+        state = { tenants: [], expenses: [], payments: [] };
+      }
+    }
+
+    function updatePropertyDropdown() {
+      const select = document.getElementById("propertySelect");
+      const activeNameLabel = document.getElementById("activePropertyName");
+      if (!select || !activeNameLabel) return;
+
+      select.innerHTML = "";
+      const keys = Object.keys(rootData.properties || {});
+      
+      keys.forEach((id, index) => {
+        const prop = rootData.properties[id];
+        let displayName = prop.name;
+        if (!displayName || displayName.trim() === "" || displayName.includes("prop_")) {
+          displayName = `Appartamento ${index + 1}`;
+          prop.name = displayName;
+        }
+        
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = displayName;
+        
+        if (id === rootData.activePropertyId) {
+          option.selected = true;
+          activeNameLabel.textContent = displayName;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    async function saveCloud() {
+      if (!currentUser) {
+        alert("Devi accedere con Google per salvare i tuoi dati!");
+        login();
+        return;
+      }
+      const syncStatus = document.getElementById("syncStatus");
+      syncStatus.textContent = "⏳ Salvataggio...";
+      try {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        
+        if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
+          rootData.properties[rootData.activePropertyId].tenants = state.tenants;
+          rootData.properties[rootData.activePropertyId].expenses = state.expenses;
+          rootData.properties[rootData.activePropertyId].payments = state.payments;
+        }
+
+        await setDoc(userDocRef, rootData);
+        syncStatus.textContent = `🟢 Utente: ${currentUser.displayName || currentUser.email}`;
+      } catch (e) {
+        console.error("Errore salvataggio:", e);
+        syncStatus.textContent = "🔴 Errore Salvataggio";
+      }
+    }
+
+    window.createNewProperty = () => {
+      const name = prompt("Inserisci il nome del nuovo appartamento (es. 'Via Roma 10'):");
+      const finalName = name && name.trim() ? name.trim() : "Appartamento";
+
+      const newId = "prop_" + Date.now();
+      rootData.properties[newId] = {
+        name: finalName,
+        tenants: [],
+        expenses: [],
+        payments: []
+      };
+      rootData.activePropertyId = newId;
+      saveCloud();
+    };
+
+    window.renameCurrentProperty = () => {
+      if (!rootData.activePropertyId || !rootData.properties[rootData.activePropertyId]) return;
+      const currentName = rootData.properties[rootData.activePropertyId].name || "Appartamento";
+      const newName = prompt("Inserisci il nuovo nome dell'appartamento:", currentName);
+      
+      if (newName !== null && newName.trim() !== "") {
+        rootData.properties[rootData.activePropertyId].name = newName.trim();
+        updatePropertyDropdown();
+        saveCloud();
+      }
+    };
+
+    window.switchProperty = (propertyId) => {
+      rootData.activePropertyId = propertyId;
+      loadActivePropertyState();
+      updatePropertyDropdown();
+      saveCloud();
+      if (typeof window.renderAll === "function") window.renderAll();
+    };
+
+    window.deleteCurrentProperty = () => {
+      const keys = Object.keys(rootData.properties);
+      if (keys.length <= 1) {
+        alert("Devi avere almeno un appartamento gestito.");
+        return;
+      }
+      const currentPropName = rootData.properties[rootData.activePropertyId]?.name || "questo appartamento";
+      if (confirm(`Sei sicuro di voler eliminare definitivamente "${currentPropName}" e tutti i suoi dati?`)) {
+        delete rootData.properties[rootData.activePropertyId];
+        rootData.activePropertyId = Object.keys(rootData.properties)[0];
+        saveCloud();
+      }
+    };
+
+    window.login = () => signInWithPopup(auth, provider).catch(err => alert("Errore login: " + err.message));
+    window.logout = () => signOut(auth);
+    window.save = saveCloud;
+    window.getState = () => state;
+  </script>
+
+  <script>
+    const money = value => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
+    const escapeHtml = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+
+    // Istanza Grafici Chart.js globali
+    let charts = {};
+
+    function formatDate(dateString) {
+      if (!dateString) return "-";
+      const parts = dateString.split("-");
+      if (parts.length === 2) return formatMonth(dateString);
+      const [year, month, day] = parts.map(Number);
+      if (!year || !month || !day) return dateString;
+      const date = new Date(year, month - 1, day);
+      const dayStr = String(date.getDate()).padStart(2, "0");
+      const monthName = date.toLocaleDateString("it-IT", { month: "long" });
+      return `${dayStr} ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${date.getFullYear()}`;
+    }
+
+    function formatMonth(monthString) {
+      if (!monthString) return "-";
+      const parts = monthString.split("-");
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      if (!year || !month) return monthString;
+      const date = new Date(year, month - 1, 1);
+      const monthName = date.toLocaleDateString("it-IT", { month: "long" });
+      const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      if (parts.length === 3) return `${String(Number(parts[2])).padStart(2, "0")} ${capMonth} ${year}`;
+      return `${capMonth} ${year}`;
+    }
+
+    function monthToIndex(value) {
+      if (!value) return 0;
+      const parts = value.split("-").map(Number);
+      return parts[0] * 12 + parts[1] - 1;
+    }
+
+    function getCurrentMonthIndex() {
+      const now = new Date();
+      return now.getFullYear() * 12 + now.getMonth();
+    }
+
+    function getRentMonths(tenant, yearFilter = "ALL") {
+      if (!tenant.contractStart || !tenant.contractEnd) return [];
+      const start = monthToIndex(tenant.contractStart);
+      const end = monthToIndex(tenant.contractEnd);
+      const lastMonth = Math.min(end, getCurrentMonthIndex());
+      const months = [];
+      for (let index = start; index <= lastMonth; index++) {
+        const year = Math.floor(index / 12);
+        const month = (index % 12) + 1;
+        const monthStr = `${year}-${String(month).padStart(2, "0")}`;
+        if (yearFilter === "ALL" || String(year) === String(yearFilter)) {
+          months.push(monthStr);
+        }
+      }
+      return months;
+    }
+
+    function getAvailableYears() {
+      const state = window.getState ? window.getState() : { expenses: [], payments: [] };
+      const yearsSet = new Set();
+      
+      (state.expenses || []).forEach(e => { if (e.date) yearsSet.add(e.date.split("-")[0]); });
+      (state.payments || []).forEach(p => { if (p.date) yearsSet.add(p.date.split("-")[0]); });
+      (state.tenants || []).forEach(t => {
+        if (t.contractStart) yearsSet.add(t.contractStart.split("-")[0]);
+        if (t.contractEnd) yearsSet.add(t.contractEnd.split("-")[0]);
+      });
+
+      yearsSet.add(String(new Date().getFullYear()));
+      return Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
+    }
+
+    function updateYearDropdowns() {
+      const years = getAvailableYears();
+      const expSelect = document.getElementById("yearFilterExpenses");
+      const rmSelect = document.getElementById("yearFilterRooms");
+      const dashSelect = document.getElementById("yearFilterDashboard");
+
+      [expSelect, rmSelect, dashSelect].forEach(select => {
+        if (!select) return;
+        const currentVal = select.value;
+        select.innerHTML = '<option value="ALL">Da sempre (Tutti gli anni)</option>';
+        years.forEach(y => {
+          const opt = document.createElement("option");
+          opt.value = y;
+          opt.textContent = y;
+          select.appendChild(opt);
+        });
+        if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+          select.value = currentVal;
+        }
+      });
+    }
+
+    function getTenantExpenses(tenantId, yearFilter = "ALL") {
+      const state = window.getState ? window.getState() : { expenses: [] };
+      return state.expenses
+        .filter(expense => {
+          const matchesTenant = expense.tenantIds.includes(tenantId);
+          const matchesYear = yearFilter === "ALL" || (expense.date && expense.date.startsWith(yearFilter));
+          return matchesTenant && matchesYear;
+        })
+        .map(expense => ({ ...expense, share: expense.amount / expense.tenantIds.length }));
+    }
+
+    function getTenantPayments(tenantId, yearFilter = "ALL") {
+      const state = window.getState ? window.getState() : { payments: [] };
+      return state.payments.filter(payment => {
+        const matchesTenant = payment.tenantId === tenantId;
+        const matchesYear = yearFilter === "ALL" || (payment.date && payment.date.startsWith(yearFilter));
+        return matchesTenant && matchesYear;
+      });
+    }
+
+    function getTenantSummary(tenant, yearFilter = "ALL") {
+      const expenses = getTenantExpenses(tenant.id, yearFilter);
+      const payments = getTenantPayments(tenant.id, yearFilter);
+      const rentMonths = getRentMonths(tenant, yearFilter);
+      const totalExpenses = expenses.reduce((sum, item) => sum + item.share, 0);
+      const totalRent = rentMonths.length * Number(tenant.monthlyRent || 0);
+      const totalPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const totalDue = totalExpenses + totalRent;
+      return { expenses, payments, rentMonths, totalExpenses, totalRent, totalPaid, totalDue, balance: totalDue - totalPaid };
+    }
+
+    function toggleSection(contentId, arrowId) {
+      const content = document.getElementById(contentId);
+      const arrow = document.getElementById(arrowId);
+      if (!content) return;
+      
+      if (content.classList.contains("open")) {
+        content.classList.remove("open");
+        if (arrow) arrow.textContent = "▼";
+      } else {
+        content.classList.add("open");
+        if (arrow) arrow.textContent = "▲";
+      }
+    }
+
+    function toggleChartsToggle() {
+      const collapsible = document.getElementById("chartsCollapsible");
+      const icon = document.getElementById("chartsToggleIcon");
+      if (collapsible.classList.contains("open")) {
+        collapsible.classList.remove("open");
+        icon.textContent = "▼";
+      } else {
+        collapsible.classList.add("open");
+        icon.textContent = "▲";
+        renderDashboardCharts();
+      }
+    }
+
+    function renderAll() {
+      updateYearDropdowns();
+      renderDashboard();
+      renderTenantChecks();
+      renderTenants();
+      renderExpenses();
+      renderRooms();
+    }
+    window.renderAll = renderAll;
+
+    function renderDashboard() {
+      const state = window.getState ? window.getState() : { tenants: [], expenses: [] };
+      const selectedYear = document.getElementById("yearFilterDashboard")?.value || "ALL";
+
+      document.getElementById("statTenants").textContent = state.tenants.length;
+      
+      const filteredExpenses = (state.expenses || []).filter(e => selectedYear === "ALL" || (e.date && e.date.startsWith(selectedYear)));
+      document.getElementById("statExpenses").textContent = filteredExpenses.length;
+      document.getElementById("statExpenseAmount").textContent = money(filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0));
+
+      const totalDueOverall = state.tenants.reduce((sum, t) => {
+        const summary = getTenantSummary(t, selectedYear);
+        return sum + Math.max(summary.balance, 0);
+      }, 0);
+      
+      document.getElementById("statDue").textContent = money(totalDueOverall);
+
+      const container = document.getElementById("dashboardTenants");
+      if (!state.tenants.length) {
+        container.innerHTML = '<p class="empty">Nessun inquilino presente in questo appartamento.</p>';
+      } else {
+        container.innerHTML = `
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Inquilino</th>
+                  <th>Stanza</th>
+                  <th>Totale dovuto (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                  <th>Pagato (${selectedYear === "ALL" ? "Da sempre" : selectedYear})</th>
+                  <th>Da pagare</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.tenants.map(tenant => {
+                  const summary = getTenantSummary(tenant, selectedYear);
+                  const due = Math.max(summary.balance, 0);
+                  return `
+                    <tr>
+                      <td>${escapeHtml(tenant.name)}</td>
+                      <td>${escapeHtml(tenant.room || "-")}</td>
+                      <td>${money(summary.totalDue)}</td>
+                      <td>${money(summary.totalPaid)}</td>
+                      <td class="${due > 0 ? "positive" : "negative"}">${money(due)}</td>
+                    </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      // Aggiorna i grafici se la tendina è aperta
+      if (document.getElementById("chartsCollapsible")?.classList.contains("open")) {
+        renderDashboardCharts();
+      }
+    }
+
+    // --- STREAMING_CHUNK: Render dashboard statistics and utility line charts with spanGaps ---
+    function renderDashboardCharts() {
+      const state = window.getState ? window.getState() : { tenants: [], expenses: [], payments: [] };
+      const selectedYear = document.getElementById("yearFilterDashboard")?.value || "ALL";
+
+      // Mesi di etichetta
+      const monthsLabels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+
+      // 1. DATA: Inquilini Mensili
+      const tenantsMonthlyData = new Array(12).fill(0);
+      monthsLabels.forEach((_, monthIdx) => {
+        state.tenants.forEach(t => {
+          if (!t.contractStart || !t.contractEnd) return;
+          const startIdx = monthToIndex(t.contractStart);
+          const endIdx = monthToIndex(t.contractEnd);
+
+          if (selectedYear === "ALL") {
+            tenantsMonthlyData[monthIdx]++;
+          } else {
+            const targetMonthIdx = Number(selectedYear) * 12 + monthIdx;
+            if (targetMonthIdx >= startIdx && targetMonthIdx <= endIdx) {
+              tenantsMonthlyData[monthIdx]++;
+            }
+          }
+        });
+      });
+
+      // 2. DATA: Entrate vs Spese
+      const incomeData = new Array(12).fill(0);
+      const expenseData = new Array(12).fill(0);
+
+      (state.payments || []).forEach(p => {
+        if (!p.date) return;
+        const [y, m] = p.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12) incomeData[m - 1] += Number(p.amount || 0);
+        }
+      });
+
+      (state.expenses || []).forEach(e => {
+        if (!e.date) return;
+        const [y, m] = e.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12) expenseData[m - 1] += Number(e.amount || 0);
+        }
+      });
+
+      // 3 & 4. DATA: Utenze per Categoria
+      const catData = {
+        Luce: new Array(12).fill(0),
+        Gas: new Array(12).fill(0),
+        Acqua: new Array(12).fill(0),
+        Condominio: new Array(12).fill(0),
+        Manutenzione: new Array(12).fill(0),
+        Internet: new Array(12).fill(0)
+      };
+
+      (state.expenses || []).forEach(e => {
+        if (!e.date || !e.category) return;
+        const [y, m] = e.date.split("-").map(Number);
+        if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
+          if (m >= 1 && m <= 12 && catData[e.category]) {
+            catData[e.category][m - 1] += Number(e.amount || 0);
+          }
+        }
+      });
+
+      // Converte i valori 0 in null per non tracciare punti vuoti e collegare solo le spese reali
+      const cleanUtilityData = (arr) => arr.map(v => v > 0 ? v : null);
+
+      const luceClean = cleanUtilityData(catData.Luce);
+      const gasClean = cleanUtilityData(catData.Gas);
+      const acquaClean = cleanUtilityData(catData.Acqua);
+      const condominioClean = cleanUtilityData(catData.Condominio);
+      const manutenzioneClean = cleanUtilityData(catData.Manutenzione);
+      const internetClean = cleanUtilityData(catData.Internet);
+
+      // DISTRUZIONE GRAFICI PRECEDENTI (Reset)
+      Object.keys(charts).forEach(key => { if (charts[key]) charts[key].destroy(); });
+
+      // GRAFICO 1: INQUILINI
+      charts.tenants = new Chart(document.getElementById("chartTenantsMonthly"), {
+        type: "bar",
+        data: {
+          labels: monthsLabels,
+          datasets: [{ label: "Inquilini Attivi", data: tenantsMonthlyData, backgroundColor: "#2563eb", borderRadius: 4 }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+      });
+
+      // GRAFICO 2: ENTRATE VS SPESE
+      charts.incomeExpenses = new Chart(document.getElementById("chartIncomeExpenses"), {
+        type: "bar",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Entrate (Bonifici)", data: incomeData, backgroundColor: "#16a34a", borderRadius: 4 },
+            { label: "Spese Totali", data: expenseData, backgroundColor: "#dc2626", borderRadius: 4 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+
+      // GRAFICO 3: UTENZE PRIMARIE (LUCE, GAS, ACQUA)
+      charts.utilitiesMain = new Chart(document.getElementById("chartUtilitiesMain"), {
+        type: "line",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Luce", data: luceClean, borderColor: "#eab308", backgroundColor: "#fef08a", spanGaps: true, tension: 0.2 },
+            { label: "Gas", data: gasClean, borderColor: "#f97316", backgroundColor: "#ffedd5", spanGaps: true, tension: 0.2 },
+            { label: "Acqua", data: acquaClean, borderColor: "#0284c7", backgroundColor: "#e0f2fe", spanGaps: true, tension: 0.2 }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      // GRAFICO 4: ALTRE UTENZE (CONDOMINIO, MANUTENZIONE, INTERNET)
+      charts.utilitiesOther = new Chart(document.getElementById("chartUtilitiesOther"), {
+        type: "line",
+        data: {
+          labels: monthsLabels,
+          datasets: [
+            { label: "Condominio", data: condominioClean, borderColor: "#8b5cf6", backgroundColor: "#f3e8ff", spanGaps: true, tension: 0.2 },
+            { label: "Manutenzione", data: manutenzioneClean, borderColor: "#64748b", backgroundColor: "#f1f5f9", spanGaps: true, tension: 0.2 },
+            { label: "Internet", data: internetClean, borderColor: "#06b6d4", backgroundColor: "#cffaff", spanGaps: true, tension: 0.2 }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    function renderTenantChecks() {
+      const state = window.getState ? window.getState() : { tenants: [] };
+      const container = document.getElementById("expenseTenantChecks");
+      if (!state.tenants.length) {
+        container.innerHTML = '<p class="empty">Aggiungi prima almeno un inquilino a questo appartamento.</p>';
+        return;
+      }
+      container.innerHTML = state.tenants.map(tenant => `
+        <label class="check-item">
+          <input type="checkbox" name="expenseTenants" value="${tenant.id}">
+          ${escapeHtml(tenant.name)} ${tenant.room ? " — stanza " + escapeHtml(tenant.room) : ""}
+        </label>`).join("");
+    }
+
+    function renderTenants() {
+      const state = window.getState ? window.getState() : { tenants: [] };
+      const container = document.getElementById("tenantsList");
+      if (!state.tenants.length) {
+        container.innerHTML = '<p class="empty">Nessun inquilino presente in questo appartamento.</p>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Nome</th><th>Telefono</th><th>Stanza</th><th>Periodo contratto</th><th>Affitto</th><th>Azioni</th></tr></thead>
+            <tbody>
+              ${state.tenants.map(tenant => `
+                <tr>
+                  <td>${escapeHtml(tenant.name)}</td>
+                  <td>${escapeHtml(tenant.phone || "-")}</td>
+                  <td>${escapeHtml(tenant.room || "-")}</td>
+                  <td>${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)}</td>
+                  <td>${money(tenant.monthlyRent)}</td>
+                  <td class="actions-cell"><button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Elimina</button></td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderExpenses() {
+      const state = window.getState ? window.getState() : { expenses: [], tenants: [] };
+      const container = document.getElementById("expensesList");
+      const selectedYear = document.getElementById("yearFilterExpenses")?.value || "ALL";
+
+      let filteredExpenses = state.expenses || [];
+      if (selectedYear !== "ALL") {
+        filteredExpenses = filteredExpenses.filter(e => e.date && e.date.startsWith(selectedYear));
+      }
+
+      if (!filteredExpenses.length) {
+        container.innerHTML = '<p class="empty">Nessuna spesa trovata per i criteri selezionati.</p>';
+        return;
+      }
+
+      const sorted = [...filteredExpenses].sort((a, b) => b.date.localeCompare(a.date));
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Data</th><th>Causale</th><th>Categoria</th><th>Totale</th><th>Inquilini</th><th>Quota indiv.</th><th>Azioni</th></tr></thead>
+            <tbody>
+              ${sorted.map(expense => {
+                const names = expense.tenantIds.map(id => {
+                  const t = state.tenants.find(item => item.id === id);
+                  return t ? t.name : "Inquilino storico";
+                });
+                const share = expense.tenantIds.length ? expense.amount / expense.tenantIds.length : 0;
+                return `
+                  <tr>
+                    <td>${formatDate(expense.date)}</td>
+                    <td><strong>${escapeHtml(expense.description)}</strong>${expense.notes ? `<br><small>${escapeHtml(expense.notes)}</small>` : ""}</td>
+                    <td>${escapeHtml(expense.category || "-")}</td>
+                    <td>${money(expense.amount)}</td>
+                    <td>${names.length ? names.map(escapeHtml).join("<br>") : "<small class='muted'>Generale</small>"}</td>
+                    <td>${money(share)}</td>
+                    <td class="actions-cell">
+                      <button class="btn-whatsapp" onclick="sendExpenseWhatsApp('${expense.id}')" title="Notifica su WhatsApp">📱 Condividi</button>
+                      <button class="btn-danger" onclick="deleteExpense('${expense.id}')">Elimina</button>
+                    </td>
+                  </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderRooms() {
+      const state = window.getState ? window.getState() : { tenants: [] };
+      const container = document.getElementById("roomsList");
+      const selectedYear = document.getElementById("yearFilterRooms")?.value || "ALL";
+
+      if (!state.tenants.length) {
+        container.innerHTML = '<div class="card"><p class="empty">Aggiungi un inquilino per visualizzare le stanze.</p></div>';
+        return;
+      }
+
+      container.innerHTML = state.tenants.map((tenant, index) => {
+        const summary = getTenantSummary(tenant, selectedYear);
+        const due = Math.max(summary.balance, 0);
+        const tenantCardContentId = `tenantCardContent_${index}`;
+        const tenantArrowId = `tenantArrow_${index}`;
+
+        const expContentId = `expContent_${index}`;
+        const expArrowId = `expArrow_${index}`;
+
+        const rentContentId = `rentContent_${index}`;
+        const rentArrowId = `rentArrow_${index}`;
+
+        const payContentId = `payContent_${index}`;
+        const payArrowId = `payArrow_${index}`;
+
+        return `
+          <div class="card tenant-card">
+            <div class="tenant-card-header" onclick="toggleSection('${tenantCardContentId}', '${tenantArrowId}')">
+              <div class="tenant-card-title">
+                <h2 style="margin: 0; display: inline-block;">${escapeHtml(tenant.name)}</h2>
+                ${tenant.room ? `<span class="badge">Stanza ${escapeHtml(tenant.room)}</span>` : ""}
+                <span class="${due > 0 ? "badge badge-danger" : "badge badge-success"}">${due > 0 ? "Da pagare " + money(due) : "Nessun importo dovuto"}</span>
+              </div>
+              <span id="${tenantArrowId}" class="arrow-icon">▼</span>
+            </div>
+
+            <div id="${tenantCardContentId}" class="collapsible-content">
+              <p class="muted" style="margin-top: 10px;">Contratto: ${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)} | Affitto mensile: ${money(tenant.monthlyRent)} | WhatsApp: ${escapeHtml(tenant.phone || "non inserito")}</p>
+              
+              <div class="stats">
+                <div class="stat"><small>Spese (${selectedYear})</small><strong>${money(summary.totalExpenses)}</strong></div>
+                <div class="stat"><small>Affitti maturati (${selectedYear})</small><strong>${money(summary.totalRent)}</strong></div>
+                <div class="stat"><small>Totale dovuto (${selectedYear})</small><strong>${money(summary.totalDue)}</strong></div>
+                <div class="stat"><small>Totale pagato (${selectedYear})</small><strong>${money(summary.totalPaid)}</strong></div>
+                <div class="stat"><small>Da pagare</small><strong class="${due > 0 ? "positive" : "negative"}">${money(due)}</strong></div>
+              </div>
+
+              <!-- Sotto-sezione 1: Spese Personali -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${expContentId}', '${expArrowId}')">
+                <h3>Spese personali (${selectedYear})</h3>
+                <span id="${expArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${expContentId}" class="collapsible-content">
+                ${summary.expenses.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Quota</th></tr></thead><tbody>${summary.expenses.map(e => `<tr><td>${formatDate(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${money(e.share)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna spesa registrata per questo periodo.</p>'}
+              </div>
+
+              <!-- Sotto-sezione 2: Mensilità di affitto -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${rentContentId}', '${rentArrowId}')">
+                <h3>Mensilità di affitto (${selectedYear})</h3>
+                <span id="${rentArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${rentContentId}" class="collapsible-content">
+                ${summary.rentMonths.length ? `<div class="table-wrapper"><table><thead><tr><th>Mensilità</th><th>Importo</th></tr></thead><tbody>${summary.rentMonths.map(m => `<tr><td>${formatMonth(m)}</td><td>${money(tenant.monthlyRent)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna mensilità per questo periodo.</p>'}
+              </div>
+
+              <!-- Sotto-sezione 3: Bonifici effettuati -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${payContentId}', '${payArrowId}')">
+                <h3>Bonifici effettuati (${selectedYear})</h3>
+                <span id="${payArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${payContentId}" class="collapsible-content">
+                ${summary.payments.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Importo</th><th>Azioni</th></tr></thead><tbody>${summary.payments.map(p => `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.description)}${p.notes ? `<br><small>${escapeHtml(p.notes)}</small>` : ""}</td><td>${money(p.amount)}</td><td><button class="btn-danger" onclick="deletePayment('${p.id}')">Elimina</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessun bonifico registrato per questo periodo.</p>'}
+              </div>
+
+              <div class="actions" style="margin-top: 20px;">
+                <button class="btn-primary" onclick="openPaymentModal('${tenant.id}')">Aggiungi bonifico</button>
+                ${due > 0 && tenant.phone ? `<button class="btn-whatsapp" onclick="sendWhatsApp('${tenant.id}')">Invia promemoria WhatsApp</button>` : ""}
+              </div>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    function deleteAnnualDataPrompt() {
+      const years = getAvailableYears();
+      if (!years.length) { alert("Non ci sono dati disponibili da eliminare."); return; }
+
+      const yearToDelete = prompt(`Inserisci l'anno per cui desideri ELIMINARE TUTTI I DATI (Spese e Bonifici).\n\nAnni disponibili: ${years.join(", ")}`);
+      if (!yearToDelete) return;
+
+      const cleanYear = yearToDelete.trim();
+      if (!/^\d{4}$/.test(cleanYear)) { alert("Inserisci un anno valido nel formato AAAA (es. 2024)."); return; }
+
+      const state = window.getState();
+      const expensesToDelete = (state.expenses || []).filter(e => e.date && e.date.startsWith(cleanYear));
+      const paymentsToDelete = (state.payments || []).filter(p => p.date && p.date.startsWith(cleanYear));
+
+      if (expensesToDelete.length === 0 && paymentsToDelete.length === 0) {
+        alert(`Nessuna spesa o bonifico trovato per l'anno ${cleanYear}.`);
+        return;
+      }
+
+      if (confirm(`⚠️️ ATTENZIONE! Stai per eliminare DEFINITIVAMENTE:\n- ${expensesToDelete.length} Spese del ${cleanYear}\n- ${paymentsToDelete.length} Bonifici del ${cleanYear}\n\nConfermi l'eliminazione?`)) {
+        state.expenses = (state.expenses || []).filter(e => !(e.date && e.date.startsWith(cleanYear)));
+        state.payments = (state.payments || []).filter(p => !(p.date && p.date.startsWith(cleanYear)));
+        
+        window.save();
+        alert(`Dati dell'anno ${cleanYear} eliminati con successo.`);
+      }
+    }
+
+    function sendExpenseWhatsApp(expenseId) {
+      const state = window.getState();
+      const expense = state.expenses.find(e => e.id === expenseId);
+      if (!expense) return;
+
+      const tenantNames = expense.tenantIds.map(id => {
+        const t = state.tenants.find(item => item.id === id);
+        return t ? t.name : "Inquilino";
+      });
+
+      const share = expense.tenantIds.length ? expense.amount / expense.tenantIds.length : 0;
+
+      let msg = `📌 *NUOVA SPESA REGISTRATA*\n\n`;
+      msg += `🔹 *Causale:* ${expense.description}\n`;
+      msg += `💶 *Importo totale:* ${money(expense.amount)}\n`;
+      msg += `📅 *Data:* ${formatDate(expense.date)}\n`;
+      if (expense.category) msg += `🏷️ *Categoria:* ${expense.category}\n`;
+      msg += `\n👥 *Inquilini coinvolti:* ${tenantNames.length ? tenantNames.join(", ") : "Nessuno (Spesa generale)"}\n`;
+      if (tenantNames.length) msg += `👉 *Quota a persona:* ${money(share)}\n`;
+      if (expense.notes) msg += `\n📝 *Note:* ${expense.notes}\n`;
+
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
+    }
+
+    function exportDataToCSV() {
+      const state = window.getState();
+      if (!state) { alert("Nessun dato disponibile."); return; }
+
+      const propName = document.getElementById("activePropertyName")?.textContent || "Appartamento";
+      let csvContent = "\uFEFF";
+
+      csvContent += "=== INQUILINI ===\n";
+      csvContent += "ID;Nome;Telefono;Stanza;Affitto Mensile;Inizio Contratto;Fine Contratto;Note\n";
+      (state.tenants || []).forEach(t => {
+        csvContent += `"${t.id}";"${t.name || ''}";"${t.phone || ''}";"${t.room || ''}";"${t.monthlyRent || 0}";"${t.contractStart || ''}";"${t.contractEnd || ''}";"${(t.notes || '').replace(/"/g, '""')}"\n`;
+      });
+
+      csvContent += "\n=== SPESE APPARTAMENTO ===\n";
+      csvContent += "ID;Data;Causale;Categoria;Importo Totale;ID Inquilini Coinvolti;Note\n";
+      (state.expenses || []).forEach(e => {
+        const tenantIdsStr = (e.tenantIds || []).join(",");
+        csvContent += `"${e.id}";"${e.date || ''}";"${(e.description || '').replace(/"/g, '""')}";"${e.category || ''}";"${e.amount || 0}";"${tenantIdsStr}";"${(e.notes || '').replace(/"/g, '""')}"\n`;
+      });
+
+      csvContent += "\n=== BONIFICI INQUILINI ===\n";
+      csvContent += "ID;ID Inquilino;Nome Inquilino;Data;Causale;Importo;Note\n";
+      (state.payments || []).forEach(p => {
+        const tenant = (state.tenants || []).find(t => t.id === p.tenantId);
+        const tenantName = tenant ? tenant.name : "Sconosciuto";
+        csvContent += `"${p.id}";"${p.tenantId || ''}";"${tenantName}";"${p.date || ''}";"${(p.description || '').replace(/"/g, '""')}";"${p.amount || 0}";"${(p.notes || '').replace(/"/g, '""')}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const fileName = `${propName.toLowerCase().replace(/\s+/g, '_')}_dati_${new Date().toISOString().slice(0, 10)}.csv`;
+      
+      link.setAttribute("href", url);
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function importDataFromCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const text = e.target.result;
+          const lines = text.split(/\r\n|\n/);
+          
+          let currentSection = "";
+          const newTenants = [];
+          const newExpenses = [];
+          const newPayments = [];
+
+          lines.forEach(line => {
+            let trimmed = line.trim();
+            if (!trimmed) return;
+
+            if (trimmed.includes("=== INQUILINI ===")) { currentSection = "tenants"; return; }
+            if (trimmed.includes("=== SPESE APPARTAMENTO ===")) { currentSection = "expenses"; return; }
+            if (trimmed.includes("=== BONIFICI INQUILINI ===")) { currentSection = "payments"; return; }
+
+            if (trimmed.startsWith("ID;") || trimmed.startsWith("ID Inquilino") || trimmed.startsWith("Nome;")) return;
+
+            const cols = trimmed.split(';').map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+
+            if (currentSection === "tenants" && cols.length >= 5) {
+              newTenants.push({
+                id: cols[0] || "tenant_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                name: cols[1] || "",
+                phone: cols[2] || "",
+                room: cols[3] || "",
+                monthlyRent: parseFloat(cols[4]) || 0,
+                contractStart: cols[5] || "",
+                contractEnd: cols[6] || "",
+                notes: cols[7] || ""
+              });
+            } else if (currentSection === "expenses" && cols.length >= 4) {
+              newExpenses.push({
+                id: cols[0] || "expense_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                date: cols[1] || "",
+                description: cols[2] || "",
+                category: cols[3] || "Altro",
+                amount: parseFloat(cols[4]) || 0,
+                tenantIds: cols[5] ? cols[5].split(",").map(x => x.trim()).filter(x => x) : [],
+                notes: cols[6] || ""
+              });
+            } else if (currentSection === "payments" && cols.length >= 4) {
+              newPayments.push({
+                id: cols[0] || "payment_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                tenantId: cols[1] || "",
+                date: cols[3] || cols[2] || "",
+                description: cols[4] || "",
+                amount: parseFloat(cols[5]) || 0,
+                notes: cols[6] || ""
+              });
+            }
+          });
+
+          if (newTenants.length === 0 && newExpenses.length === 0 && newPayments.length === 0) {
+            alert("Nessun dato valido trovato nel file. Verificare che il file sia salvato in formato CSV con separatore punto e virgola (;).");
+            return;
+          }
+
+          if (confirm(`Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese e ${newPayments.length} bonifici.\n\nVuoi sovrascrivere i dati dell'appartamento corrente con questi?`)) {
+            const state = window.getState();
+            state.tenants = newTenants;
+            state.expenses = newExpenses;
+            state.payments = newPayments;
+
+            window.save();
+            alert("Importazione completata con successo!");
+          }
+        } catch (err) {
+          alert("Errore durante l'importazione: " + err.message);
+        }
+      };
+
+      reader.readAsText(file, "UTF-8");
+      event.target.value = "";
+    }
+
+    function deleteTenant(id) {
+      const state = window.getState();
+      if (confirm("Eliminare questo inquilino?")) {
+        state.tenants = state.tenants.filter(t => t.id !== id);
+        window.save();
+      }
+    }
+
+    function deleteExpense(id) {
+      const state = window.getState();
+      if (confirm("Eliminare questa spesa?")) {
+        state.expenses = state.expenses.filter(e => e.id !== id);
+        window.save();
+      }
+    }
+
+    function deletePayment(id) {
+      const state = window.getState();
+      if (confirm("Eliminare questo bonifico?")) {
+        state.payments = state.payments.filter(p => p.id !== id);
+        window.save();
+      }
+    }
+
+    function openPaymentModal(tenantId) {
+      const state = window.getState();
+      const tenant = state.tenants.find(t => t.id === tenantId);
+      if (!tenant) return;
+      document.getElementById("paymentTenantId").value = tenantId;
+      document.getElementById("paymentTenantLabel").textContent = "Inquilino: " + tenant.name;
+      document.getElementById("paymentDate").value = new Date().toISOString().slice(0, 10);
+      document.getElementById("paymentModal").classList.add("open");
+    }
+
+    function closePaymentModal() { document.getElementById("paymentModal").classList.remove("open"); }
+
+    function sendWhatsApp(tenantId) {
+      const state = window.getState();
+      const tenant = state.tenants.find(t => t.id === tenantId);
+      if (!tenant || !tenant.phone) return alert("Inserisci il numero WhatsApp.");
+      const summary = getTenantSummary(tenant);
+      const due = Math.max(summary.balance, 0);
+
+      const msg = `Ciao ${tenant.name},\n\necco il riepilogo aggiornato.\n\nTotale dovuto: ${money(summary.totalDue)}\nTotale pagato: ${money(summary.totalPaid)}\nDa pagare: ${money(due)}\n\nGrazie.`;
+      window.open(`https://wa.me/${tenant.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+    }
+
+    window.toggleSection = toggleSection;
+    window.toggleChartsToggle = toggleChartsToggle;
+    window.exportDataToCSV = exportDataToCSV;
+    window.importDataFromCSV = importDataFromCSV;
+    window.deleteAnnualDataPrompt = deleteAnnualDataPrompt;
+    window.sendExpenseWhatsApp = sendExpenseWhatsApp;
+
+    document.getElementById("tenantForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const newTenant = {
+        id: "tenant_" + Date.now(),
+        name: document.getElementById("tenantName").value,
+        phone: document.getElementById("tenantPhone").value,
+        room: document.getElementById("tenantRoom").value,
+        monthlyRent: parseFloat(document.getElementById("tenantRent").value) || 0,
+        contractStart: document.getElementById("tenantStart").value,
+        contractEnd: document.getElementById("tenantEnd").value,
+        notes: document.getElementById("tenantNotes").value
+      };
+      state.tenants.push(newTenant);
+      window.save();
+      e.target.reset();
+    });
+
+    document.getElementById("expenseForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const selectedTenants = Array.from(document.querySelectorAll("input[name='expenseTenants']:checked")).map(cb => cb.value);
+
+      const newExpense = {
+        id: "expense_" + Date.now(),
+        description: document.getElementById("expenseDescription").value,
+        amount: parseFloat(document.getElementById("expenseAmount").value) || 0,
+        date: document.getElementById("expenseDate").value,
+        category: document.getElementById("expenseCategory").value,
+        tenantIds: selectedTenants,
+        notes: document.getElementById("expenseNotes").value
+      };
+
+      state.expenses.push(newExpense);
+      window.save();
+      e.target.reset();
+    });
+
+    document.getElementById("paymentForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const newPayment = {
+        id: "payment_" + Date.now(),
+        tenantId: document.getElementById("paymentTenantId").value,
+        date: document.getElementById("paymentDate").value,
+        amount: parseFloat(document.getElementById("paymentAmount").value) || 0,
+        description: document.getElementById("paymentDescription").value,
+        notes: document.getElementById("paymentNotes").value
+      };
+
+      state.payments.push(newPayment);
+      window.save();
+      closePaymentModal();
+      e.target.reset();
+    });
+
+    document.querySelectorAll("nav button[data-page]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("nav button[data-page]").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.page).classList.add("active");
+        renderAll();
+      });
+    });
+
+    window.addEventListener("click", e => {
+      if (e.target === document.getElementById("paymentModal")) closePaymentModal();
+    });
+  </script>
+</body>
+</html>
