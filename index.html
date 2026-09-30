@@ -209,7 +209,6 @@
       width: auto;
     }
 
-    /* STILI TENDINA GRAFICI */
     .collapsible-btn {
       width: 100%;
       background: #374151;
@@ -228,9 +227,52 @@
 
     .collapsible-btn:hover { background: #1f2937; }
 
+    /* Custom headers and sub-accordions with right-aligned arrows */
+    .collapsible-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .collapsible-header h2,
+    .collapsible-header h3 {
+      margin: 0;
+      flex-grow: 1;
+    }
+
+    .collapsible-header .arrow-icon {
+      font-size: 18px;
+      font-weight: bold;
+      margin-left: 15px;
+      transition: transform 0.2s ease;
+      color: #4b5563;
+    }
+
+    .collapsible-btn .arrow-icon {
+      color: white;
+    }
+
+    .sub-collapsible-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-top: 20px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 8px;
+      user-select: none;
+    }
+
+    .sub-collapsible-header h3 {
+      margin: 0;
+    }
+
     .collapsible-content {
       display: none;
-      margin-bottom: 20px;
+      margin-top: 15px;
     }
 
     .collapsible-content.open { display: block; }
@@ -269,9 +311,16 @@
     .check-item input { width: auto; margin-right: 7px; }
 
     .tenant-card { border-left: 5px solid var(--primary); }
-    .tenant-card h2 {
+    .tenant-card-header {
       display: flex;
       justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .tenant-card-title {
+      display: flex;
       gap: 10px;
       flex-wrap: wrap;
       align-items: center;
@@ -291,7 +340,6 @@
     .positive { color: var(--danger); font-weight: bold; }
     .negative { color: var(--success); font-weight: bold; }
     .empty { color: var(--muted); padding: 15px 0; }
-    .section-title { margin-top: 25px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
     .muted { color: var(--muted); }
 
     .modal {
@@ -377,7 +425,7 @@
       <!-- TENDINA GRAFICI STATISTICI -->
       <button type="button" class="collapsible-btn" onclick="toggleChartsToggle()">
         <span>📊 Mostra / Nascondi Grafici e Statistiche Avanzate</span>
-        <span id="chartsToggleIcon">▼</span>
+        <span id="chartsToggleIcon" class="arrow-icon">▼</span>
       </button>
 
       <div id="chartsCollapsible" class="collapsible-content">
@@ -478,23 +526,29 @@
         </form>
       </div>
 
+      <!-- SEZIONE ELENCO SPESE COLLAPSIBLE -->
       <div class="card">
-        <h2>Elenco spese</h2>
-        
-        <!-- BARRA FILTRO E GESTIONE ANNI -->
-        <div class="filter-bar">
-          <div class="filter-group">
-            <label for="yearFilterExpenses" style="margin: 0;">📅 Filtra per anno:</label>
-            <select id="yearFilterExpenses" onchange="renderExpenses()">
-              <option value="ALL">Tutti gli anni</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <button class="btn-danger" onclick="deleteAnnualDataPrompt()" title="Elimina in blocco spese e bonifici per un anno specifico">🗑️ Elimina per anno</button>
-          </div>
+        <div class="collapsible-header" onclick="toggleSection('expensesListContent', 'expensesListArrow')">
+          <h2 style="margin: 0;">Elenco spese</h2>
+          <span id="expensesListArrow" class="arrow-icon">▲</span>
         </div>
+        
+        <div id="expensesListContent" class="collapsible-content open">
+          <!-- BARRA FILTRO E GESTIONE ANNI -->
+          <div class="filter-bar" style="margin-top: 15px;">
+            <div class="filter-group">
+              <label for="yearFilterExpenses" style="margin: 0;">📅 Filtra per anno:</label>
+              <select id="yearFilterExpenses" onchange="renderExpenses()">
+                <option value="ALL">Tutti gli anni</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <button class="btn-danger" onclick="deleteAnnualDataPrompt()" title="Elimina in blocco spese e bonifici per un anno specifico">🗑️ Elimina per anno</button>
+            </div>
+          </div>
 
-        <div id="expensesList"></div>
+          <div id="expensesList"></div>
+        </div>
       </div>
     </section>
 
@@ -534,7 +588,6 @@
     </div>
   </div>
 
-  <!-- SCRIPT FIREBASE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -750,11 +803,9 @@
     window.getState = () => state;
   </script>
 
-  <!-- SCRIPT APPLICATIVO -->
   <script>
     const money = value => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
     const escapeHtml = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-    const uid = prefix => prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
 
     // Istanza Grafici Chart.js globali
     let charts = {};
@@ -880,6 +931,20 @@
       return { expenses, payments, rentMonths, totalExpenses, totalRent, totalPaid, totalDue, balance: totalDue - totalPaid };
     }
 
+    function toggleSection(contentId, arrowId) {
+      const content = document.getElementById(contentId);
+      const arrow = document.getElementById(arrowId);
+      if (!content) return;
+      
+      if (content.classList.contains("open")) {
+        content.classList.remove("open");
+        if (arrow) arrow.textContent = "▼";
+      } else {
+        content.classList.add("open");
+        if (arrow) arrow.textContent = "▲";
+      }
+    }
+
     function toggleChartsToggle() {
       const collapsible = document.getElementById("chartsCollapsible");
       const icon = document.getElementById("chartsToggleIcon");
@@ -889,7 +954,7 @@
       } else {
         collapsible.classList.add("open");
         icon.textContent = "▲";
-        renderDashboardCharts(); // Genera/Aggiorna i grafici quando la tendina viene aperta
+        renderDashboardCharts();
       }
     }
 
@@ -960,7 +1025,7 @@
       }
     }
 
-    // --- FUNZIONE RENDERING GRAFICI ---
+    // --- STREAMING_CHUNK: Render dashboard statistics and utility line charts with spanGaps ---
     function renderDashboardCharts() {
       const state = window.getState ? window.getState() : { tenants: [], expenses: [], payments: [] };
       const selectedYear = document.getElementById("yearFilterDashboard")?.value || "ALL";
@@ -977,7 +1042,6 @@
           const endIdx = monthToIndex(t.contractEnd);
 
           if (selectedYear === "ALL") {
-            // Conta per tutti i mesi dello storico
             tenantsMonthlyData[monthIdx]++;
           } else {
             const targetMonthIdx = Number(selectedYear) * 12 + monthIdx;
@@ -1009,7 +1073,14 @@
       });
 
       // 3 & 4. DATA: Utenze per Categoria
-      const catData = { Luce: new Array(12).fill(0), Gas: new Array(12).fill(0), Acqua: new Array(12).fill(0), Condominio: new Array(12).fill(0), Manutenzione: new Array(12).fill(0), Internet: new Array(12).fill(0) };
+      const catData = {
+        Luce: new Array(12).fill(0),
+        Gas: new Array(12).fill(0),
+        Acqua: new Array(12).fill(0),
+        Condominio: new Array(12).fill(0),
+        Manutenzione: new Array(12).fill(0),
+        Internet: new Array(12).fill(0)
+      };
 
       (state.expenses || []).forEach(e => {
         if (!e.date || !e.category) return;
@@ -1020,6 +1091,16 @@
           }
         }
       });
+
+      // Converte i valori 0 in null per non tracciare punti vuoti e collegare solo le spese reali
+      const cleanUtilityData = (arr) => arr.map(v => v > 0 ? v : null);
+
+      const luceClean = cleanUtilityData(catData.Luce);
+      const gasClean = cleanUtilityData(catData.Gas);
+      const acquaClean = cleanUtilityData(catData.Acqua);
+      const condominioClean = cleanUtilityData(catData.Condominio);
+      const manutenzioneClean = cleanUtilityData(catData.Manutenzione);
+      const internetClean = cleanUtilityData(catData.Internet);
 
       // DISTRUZIONE GRAFICI PRECEDENTI (Reset)
       Object.keys(charts).forEach(key => { if (charts[key]) charts[key].destroy(); });
@@ -1053,12 +1134,15 @@
         data: {
           labels: monthsLabels,
           datasets: [
-            { label: "Luce", data: catData.Luce, borderColor: "#eab308", backgroundColor: "#fef08a", tension: 0.3 },
-            { label: "Gas", data: catData.Gas, borderColor: "#f97316", backgroundColor: "#ffedd5", tension: 0.3 },
-            { label: "Acqua", data: catData.Acqua, borderColor: "#0284c7", backgroundColor: "#e0f2fe", tension: 0.3 }
+            { label: "Luce", data: luceClean, borderColor: "#eab308", backgroundColor: "#fef08a", spanGaps: true, tension: 0.2 },
+            { label: "Gas", data: gasClean, borderColor: "#f97316", backgroundColor: "#ffedd5", spanGaps: true, tension: 0.2 },
+            { label: "Acqua", data: acquaClean, borderColor: "#0284c7", backgroundColor: "#e0f2fe", spanGaps: true, tension: 0.2 }
           ]
         },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
       });
 
       // GRAFICO 4: ALTRE UTENZE (CONDOMINIO, MANUTENZIONE, INTERNET)
@@ -1067,12 +1151,15 @@
         data: {
           labels: monthsLabels,
           datasets: [
-            { label: "Condominio", data: catData.Condominio, borderColor: "#8b5cf6", backgroundColor: "#f3e8ff", tension: 0.3 },
-            { label: "Manutenzione", data: catData.Manutenzione, borderColor: "#64748b", backgroundColor: "#f1f5f9", tension: 0.3 },
-            { label: "Internet", data: catData.Internet, borderColor: "#06b6d4", backgroundColor: "#cffaff", tension: 0.3 }
+            { label: "Condominio", data: condominioClean, borderColor: "#8b5cf6", backgroundColor: "#f3e8ff", spanGaps: true, tension: 0.2 },
+            { label: "Manutenzione", data: manutenzioneClean, borderColor: "#64748b", backgroundColor: "#f1f5f9", spanGaps: true, tension: 0.2 },
+            { label: "Internet", data: internetClean, borderColor: "#06b6d4", backgroundColor: "#cffaff", spanGaps: true, tension: 0.2 }
           ]
         },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
       });
     }
 
@@ -1107,7 +1194,7 @@
                   <td>${escapeHtml(tenant.name)}</td>
                   <td>${escapeHtml(tenant.phone || "-")}</td>
                   <td>${escapeHtml(tenant.room || "-")}</td>
-                  <td>${formatMonth(tenant.contractStart)} -${formatMonth(tenant.contractEnd)}</td>
+                  <td>${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)}</td>
                   <td>${money(tenant.monthlyRent)}</td>
                   <td class="actions-cell"><button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Elimina</button></td>
                 </tr>`).join("")}
@@ -1172,36 +1259,74 @@
         return;
       }
 
-      container.innerHTML = state.tenants.map(tenant => {
+      container.innerHTML = state.tenants.map((tenant, index) => {
         const summary = getTenantSummary(tenant, selectedYear);
         const due = Math.max(summary.balance, 0);
+        const tenantCardContentId = `tenantCardContent_${index}`;
+        const tenantArrowId = `tenantArrow_${index}`;
+
+        const expContentId = `expContent_${index}`;
+        const expArrowId = `expArrow_${index}`;
+
+        const rentContentId = `rentContent_${index}`;
+        const rentArrowId = `rentArrow_${index}`;
+
+        const payContentId = `payContent_${index}`;
+        const payArrowId = `payArrow_${index}`;
+
         return `
           <div class="card tenant-card">
-            <h2>
-              <span>${escapeHtml(tenant.name)} ${tenant.room ? `<span class="badge">Stanza ${escapeHtml(tenant.room)}</span>` : ""}</span>
-              <span class="${due > 0 ? "badge badge-danger" : "badge badge-success"}">${due > 0 ? "Da pagare " + money(due) : "Nessun importo dovuto"}</span>
-            </h2>
-            <p class="muted">Contratto: ${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)} | Affitto mensile: ${money(tenant.monthlyRent)} | WhatsApp: ${escapeHtml(tenant.phone || "non inserito")}</p>
-            <div class="stats">
-              <div class="stat"><small>Spese (${selectedYear})</small><strong>${money(summary.totalExpenses)}</strong></div>
-              <div class="stat"><small>Affitti maturati (${selectedYear})</small><strong>${money(summary.totalRent)}</strong></div>
-              <div class="stat"><small>Totale dovuto (${selectedYear})</small><strong>${money(summary.totalDue)}</strong></div>
-              <div class="stat"><small>Totale pagato (${selectedYear})</small><strong>${money(summary.totalPaid)}</strong></div>
-              <div class="stat"><small>Da pagare</small><strong class="${due > 0 ? "positive" : "negative"}">${money(due)}</strong></div>
+            <div class="tenant-card-header" onclick="toggleSection('${tenantCardContentId}', '${tenantArrowId}')">
+              <div class="tenant-card-title">
+                <h2 style="margin: 0; display: inline-block;">${escapeHtml(tenant.name)}</h2>
+                ${tenant.room ? `<span class="badge">Stanza ${escapeHtml(tenant.room)}</span>` : ""}
+                <span class="${due > 0 ? "badge badge-danger" : "badge badge-success"}">${due > 0 ? "Da pagare " + money(due) : "Nessun importo dovuto"}</span>
+              </div>
+              <span id="${tenantArrowId}" class="arrow-icon">▼</span>
             </div>
 
-            <h3 class="section-title">Spese personali (${selectedYear})</h3>
-            ${summary.expenses.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Quota</th></tr></thead><tbody>${summary.expenses.map(e => `<tr><td>${formatDate(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${money(e.share)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna spesa registrata per questo periodo.</p>'}
+            <div id="${tenantCardContentId}" class="collapsible-content">
+              <p class="muted" style="margin-top: 10px;">Contratto: ${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)} | Affitto mensile: ${money(tenant.monthlyRent)} | WhatsApp: ${escapeHtml(tenant.phone || "non inserito")}</p>
+              
+              <div class="stats">
+                <div class="stat"><small>Spese (${selectedYear})</small><strong>${money(summary.totalExpenses)}</strong></div>
+                <div class="stat"><small>Affitti maturati (${selectedYear})</small><strong>${money(summary.totalRent)}</strong></div>
+                <div class="stat"><small>Totale dovuto (${selectedYear})</small><strong>${money(summary.totalDue)}</strong></div>
+                <div class="stat"><small>Totale pagato (${selectedYear})</small><strong>${money(summary.totalPaid)}</strong></div>
+                <div class="stat"><small>Da pagare</small><strong class="${due > 0 ? "positive" : "negative"}">${money(due)}</strong></div>
+              </div>
 
-            <h3 class="section-title">Mensilità di affitto (${selectedYear})</h3>
-            ${summary.rentMonths.length ? `<div class="table-wrapper"><table><thead><tr><th>Mensilità</th><th>Importo</th></tr></thead><tbody>${summary.rentMonths.map(m => `<tr><td>${formatMonth(m)}</td><td>${money(tenant.monthlyRent)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna mensilità per questo periodo.</p>'}
+              <!-- Sotto-sezione 1: Spese Personali -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${expContentId}', '${expArrowId}')">
+                <h3>Spese personali (${selectedYear})</h3>
+                <span id="${expArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${expContentId}" class="collapsible-content">
+                ${summary.expenses.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Quota</th></tr></thead><tbody>${summary.expenses.map(e => `<tr><td>${formatDate(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${money(e.share)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna spesa registrata per questo periodo.</p>'}
+              </div>
 
-            <h3 class="section-title">Bonifici effettuati (${selectedYear})</h3>
-            ${summary.payments.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Importo</th><th>Azioni</th></tr></thead><tbody>${summary.payments.map(p => `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.description)}${p.notes ? `<br><small>${escapeHtml(p.notes)}</small>` : ""}</td><td>${money(p.amount)}</td><td><button class="btn-danger" onclick="deletePayment('${p.id}')">Elimina</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessun bonifico registrato per questo periodo.</p>'}
+              <!-- Sotto-sezione 2: Mensilità di affitto -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${rentContentId}', '${rentArrowId}')">
+                <h3>Mensilità di affitto (${selectedYear})</h3>
+                <span id="${rentArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${rentContentId}" class="collapsible-content">
+                ${summary.rentMonths.length ? `<div class="table-wrapper"><table><thead><tr><th>Mensilità</th><th>Importo</th></tr></thead><tbody>${summary.rentMonths.map(m => `<tr><td>${formatMonth(m)}</td><td>${money(tenant.monthlyRent)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessuna mensilità per questo periodo.</p>'}
+              </div>
 
-            <div class="actions">
-              <button class="btn-primary" onclick="openPaymentModal('${tenant.id}')">Aggiungi bonifico</button>
-              ${due > 0 && tenant.phone ? `<button class="btn-whatsapp" onclick="sendWhatsApp('${tenant.id}')">Invia promemoria WhatsApp</button>` : ""}
+              <!-- Sotto-sezione 3: Bonifici effettuati -->
+              <div class="sub-collapsible-header" onclick="toggleSection('${payContentId}', '${payArrowId}')">
+                <h3>Bonifici effettuati (${selectedYear})</h3>
+                <span id="${payArrowId}" class="arrow-icon">▼</span>
+              </div>
+              <div id="${payContentId}" class="collapsible-content">
+                ${summary.payments.length ? `<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Causale</th><th>Importo</th><th>Azioni</th></tr></thead><tbody>${summary.payments.map(p => `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.description)}${p.notes ? `<br><small>${escapeHtml(p.notes)}</small>` : ""}</td><td>${money(p.amount)}</td><td><button class="btn-danger" onclick="deletePayment('${p.id}')">Elimina</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">Nessun bonifico registrato per questo periodo.</p>'}
+              </div>
+
+              <div class="actions" style="margin-top: 20px;">
+                <button class="btn-primary" onclick="openPaymentModal('${tenant.id}')">Aggiungi bonifico</button>
+                ${due > 0 && tenant.phone ? `<button class="btn-whatsapp" onclick="sendWhatsApp('${tenant.id}')">Invia promemoria WhatsApp</button>` : ""}
+              </div>
             </div>
           </div>`;
       }).join("");
@@ -1226,7 +1351,7 @@
         return;
       }
 
-      if (confirm(`⚠️ ATTENZIONE! Stai per eliminare DEFINITIVAMENTE:\n- ${expensesToDelete.length} Spese del ${cleanYear}\n- ${paymentsToDelete.length} Bonifici del ${cleanYear}\n\nConfermi l'eliminazione?`)) {
+      if (confirm(`⚠️️ ATTENZIONE! Stai per eliminare DEFINITIVAMENTE:\n- ${expensesToDelete.length} Spese del ${cleanYear}\n- ${paymentsToDelete.length} Bonifici del ${cleanYear}\n\nConfermi l'eliminazione?`)) {
         state.expenses = (state.expenses || []).filter(e => !(e.date && e.date.startsWith(cleanYear)));
         state.payments = (state.payments || []).filter(p => !(p.date && p.date.startsWith(cleanYear)));
         
@@ -1318,15 +1443,12 @@
             let trimmed = line.trim();
             if (!trimmed) return;
 
-            // Riconoscimento Sezioni
             if (trimmed.includes("=== INQUILINI ===")) { currentSection = "tenants"; return; }
             if (trimmed.includes("=== SPESE APPARTAMENTO ===")) { currentSection = "expenses"; return; }
             if (trimmed.includes("=== BONIFICI INQUILINI ===")) { currentSection = "payments"; return; }
 
-            // Salta le intestazioni delle colonne
             if (trimmed.startsWith("ID;") || trimmed.startsWith("ID Inquilino") || trimmed.startsWith("Nome;")) return;
 
-            // Pulizia delle virgolette e split per punto e virgola
             const cols = trimmed.split(';').map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
 
             if (currentSection === "tenants" && cols.length >= 5) {
@@ -1420,7 +1542,6 @@
     }
 
     function closePaymentModal() { document.getElementById("paymentModal").classList.remove("open"); }
-    function normalizePhone(phone) { return phone.replace(/\D/g, ""); }
 
     function sendWhatsApp(tenantId) {
       const state = window.getState();
@@ -1433,11 +1554,68 @@
       window.open(`https://wa.me/${tenant.phone}?text=${encodeURIComponent(msg)}`, "_blank");
     }
 
+    window.toggleSection = toggleSection;
     window.toggleChartsToggle = toggleChartsToggle;
     window.exportDataToCSV = exportDataToCSV;
     window.importDataFromCSV = importDataFromCSV;
     window.deleteAnnualDataPrompt = deleteAnnualDataPrompt;
     window.sendExpenseWhatsApp = sendExpenseWhatsApp;
+
+    document.getElementById("tenantForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const newTenant = {
+        id: "tenant_" + Date.now(),
+        name: document.getElementById("tenantName").value,
+        phone: document.getElementById("tenantPhone").value,
+        room: document.getElementById("tenantRoom").value,
+        monthlyRent: parseFloat(document.getElementById("tenantRent").value) || 0,
+        contractStart: document.getElementById("tenantStart").value,
+        contractEnd: document.getElementById("tenantEnd").value,
+        notes: document.getElementById("tenantNotes").value
+      };
+      state.tenants.push(newTenant);
+      window.save();
+      e.target.reset();
+    });
+
+    document.getElementById("expenseForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const selectedTenants = Array.from(document.querySelectorAll("input[name='expenseTenants']:checked")).map(cb => cb.value);
+
+      const newExpense = {
+        id: "expense_" + Date.now(),
+        description: document.getElementById("expenseDescription").value,
+        amount: parseFloat(document.getElementById("expenseAmount").value) || 0,
+        date: document.getElementById("expenseDate").value,
+        category: document.getElementById("expenseCategory").value,
+        tenantIds: selectedTenants,
+        notes: document.getElementById("expenseNotes").value
+      };
+
+      state.expenses.push(newExpense);
+      window.save();
+      e.target.reset();
+    });
+
+    document.getElementById("paymentForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      const state = window.getState();
+      const newPayment = {
+        id: "payment_" + Date.now(),
+        tenantId: document.getElementById("paymentTenantId").value,
+        date: document.getElementById("paymentDate").value,
+        amount: parseFloat(document.getElementById("paymentAmount").value) || 0,
+        description: document.getElementById("paymentDescription").value,
+        notes: document.getElementById("paymentNotes").value
+      };
+
+      state.payments.push(newPayment);
+      window.save();
+      closePaymentModal();
+      e.target.reset();
+    });
 
     document.querySelectorAll("nav button[data-page]").forEach(btn => {
       btn.addEventListener("click", () => {
