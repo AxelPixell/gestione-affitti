@@ -2,7 +2,7 @@
 
 Web app per la contabilità di uno o più appartamenti in affitto condiviso: inquilini, spese, bonifici, saldi individuali, grafici e promemoria WhatsApp. I dati sono salvati su Firebase (accesso con Google) e si possono esportare/importare in CSV.
 
-Ultimo aggiornamento di questo documento: 19 ottobre 2026.
+Ultimo aggiornamento di questo documento: 19 ottobre 2026 (grafici su linea temporale).
 
 ---
 
@@ -88,10 +88,17 @@ Un contratto che finisce a metà marzo resta "attivo" fino a fine marzo. Gli inq
 
 ## 7. Grafici (Chart.js)
 
-1. **Inquilini con contratto attivo, mese per mese** (a barre). Con un anno selezionato: i 12 mesi dell'anno. Con "Da sempre": dal primo inizio contratto all'ultima fine, con il numero reale di contratti attivi in ciascun mese (massimo 600 mesi). Contano solo gli inquilini con entrambe le date.
-2. **Entrate (bonifici) vs spese** (a barre).
-3. **Utenze primarie**: Luce, Gas, Acqua (linee). I mesi senza bollette sono `null` e `spanGaps: true` collega solo i punti reali.
-4. **Altre spese**: Condominio, Manutenzione, Internet (linee, stessa logica).
+Tutti i grafici seguono il filtro anno della Dashboard:
+- **anno selezionato**: asse orizzontale con i 12 mesi dell'anno (Gen ... Dic);
+- **"Da sempre"**: linea temporale reale con mese e anno (Gen 2025, Feb 2025, ...). Gli anni **non vengono sommati** nello stesso mese. Intervallo massimo: 600 mesi (protezione contro date errate).
+
+I grafici:
+1. **Inquilini con contratto attivo, mese per mese** (a barre). Con "Da sempre" l'intervallo va dal primo inizio contratto all'ultima fine. Contano solo gli inquilini con entrambe le date.
+2. **Entrate (bonifici) vs spese** (a barre). Con "Da sempre" l'intervallo va dal primo all'ultimo mese con almeno una spesa o un bonifico; i mesi intermedi senza movimenti valgono 0. Le spese sono contate per l'importo totale, non per la quota dei singoli inquilini.
+3. **Utenze primarie**: Luce, Gas, Acqua (linee).
+4. **Altre spese**: Condominio, Manutenzione, Internet (linee).
+
+Nei grafici 3 e 4 i mesi senza spese di quella categoria sono `null` e `spanGaps: true` collega solo i punti reali. Le categorie Pulizie e Altro compaiono solo nel totale spese del grafico 2. Con "Da sempre" i grafici 2, 3 e 4 condividono lo stesso intervallo di mesi, che può essere diverso da quello del grafico 1 (basato sui contratti).
 
 I grafici si ridisegnano quando la sezione è aperta e cambia il filtro anno.
 
@@ -139,28 +146,30 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 - Codice suddiviso in `index.html`, `style.css`, `script.js`.
 - Bonifici degli inquilini non più attivi conservati ("Sconosciuto" nell'export).
 
+**Terza revisione**
+- Grafici 2, 3 e 4 con "Da sempre": ora usano una linea temporale reale (mese e anno) invece di sommare lo stesso mese di anni diversi.
+
 ---
 
 ## 13. Errori e limiti noti NON ancora corretti
 
 **Errori nel codice**
-1. **Grafici 2, 3 e 4 con "Da sempre"**: sommano lo stesso mese di anni diversi (tutti i gennaio insieme, ecc.). Solo il grafico 1 è stato portato su una linea temporale reale.
-2. **Promemoria WhatsApp**: il messaggio usa i totali "da sempre", mentre la scheda mostra i totali dell'anno selezionato. Con un filtro anno attivo gli importi nel messaggio possono differire da quelli a schermo.
-3. **Form delle spese, selezione inquilini**: l'elenco comprende anche inquilini archiviati o in attivazione, e le spunte si azzerano a ogni ridisegno (cambio scheda, salvataggio, aggiornamento da un altro dispositivo) se non hai ancora premuto Salva.
-4. **Nome appartamento**: un nome che contiene `prop_` viene sostituito con "Appartamento N".
-5. **Eliminazione per anno**: l'avviso "eliminati con successo" compare senza attendere la conferma del salvataggio.
+1. **Promemoria WhatsApp**: il messaggio usa i totali "da sempre", mentre la scheda mostra i totali dell'anno selezionato. Con un filtro anno attivo gli importi nel messaggio possono differire da quelli a schermo.
+2. **Form delle spese, selezione inquilini**: l'elenco comprende anche inquilini archiviati o in attivazione, e le spunte si azzerano a ogni ridisegno (cambio scheda, salvataggio, aggiornamento da un altro dispositivo) se non hai ancora premuto Salva.
+3. **Nome appartamento**: un nome che contiene `prop_` viene sostituito con "Appartamento N".
+4. **Eliminazione per anno**: l'avviso "eliminati con successo" compare senza attendere la conferma del salvataggio.
 
 **Limiti e punti da conoscere**
-6. **Nessuna persistenza offline**: senza connessione lo stato resta "⏳ Salvataggio..." e le modifiche non ancora sincronizzate si perdono se chiudi la pagina.
-7. **Senza accesso** i form non salvano nulla: compare l'avviso e si apre il login.
-8. **Selezione account Google non forzata**: il login può riproporre subito l'ultimo account. Soluzione (non applicata): `provider.setCustomParameters({ prompt: "select_account" });` dopo la creazione di `provider`.
-9. **CSV e Excel**: l'export scrive i decimali con il punto (`120.5`). L'app li reimporta correttamente, ma Excel con impostazioni italiane può non riconoscerli come numeri se apri e risalvi il file.
-10. **Inquilino eliminato**: i suoi bonifici restano (voluto). Nelle spese a lui collegate il suo id resta tra i coinvolti, quindi la quota degli altri non cambia e nel messaggio WhatsApp compare "Inquilino".
-11. **Saldo per anno**: un bonifico conta nell'anno della sua data, anche se salda debiti di anni precedenti.
-12. **Eliminazione per anno e importazione** sono irreversibili: esporta sempre un backup prima.
-13. **Grafico 1**: l'intervallo "Da sempre" è limitato a 600 mesi (protezione contro date errate).
-14. **Limite di 1 MiB per appartamento**: invariato (un appartamento con molte migliaia di spese e bonifici potrebbe raggiungerlo).
-15. **Documento storico** `users/{uid}`: scrivibile finché non cambi la regola.
+5. **Nessuna persistenza offline**: senza connessione lo stato resta "⏳ Salvataggio..." e le modifiche non ancora sincronizzate si perdono se chiudi la pagina.
+6. **Senza accesso** i form non salvano nulla: compare l'avviso e si apre il login.
+7. **Selezione account Google non forzata**: il login può riproporre subito l'ultimo account. Soluzione (non applicata): `provider.setCustomParameters({ prompt: "select_account" });` dopo la creazione di `provider`.
+8. **CSV e Excel**: l'export scrive i decimali con il punto (`120.5`). L'app li reimporta correttamente, ma Excel con impostazioni italiane può non riconoscerli come numeri se apri e risalvi il file.
+9. **Inquilino eliminato**: i suoi bonifici restano (voluto). Nelle spese a lui collegate il suo id resta tra i coinvolti, quindi la quota degli altri non cambia e nel messaggio WhatsApp compare "Inquilino".
+10. **Saldo per anno**: un bonifico conta nell'anno della sua data, anche se salda debiti di anni precedenti.
+11. **Eliminazione per anno e importazione** sono irreversibili: esporta sempre un backup prima.
+12. **Grafici con "Da sempre"**: l'intervallo è limitato a 600 mesi (protezione contro date errate). Con molti anni di dati l'asse orizzontale diventa fitto e Chart.js salta alcune etichette.
+13. **Limite di 1 MiB per appartamento**: invariato (un appartamento con molte migliaia di spese e bonifici potrebbe raggiungerlo).
+14. **Documento storico** `users/{uid}`: scrivibile finché non cambi la regola.
 
 **Non verificato**
-16. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafico 1, schede aperte, export/import, reset). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.
+15. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.

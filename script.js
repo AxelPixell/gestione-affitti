@@ -31,7 +31,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
-provider.setCustomParameters({ prompt: "select_account" });
 
 let currentUser = null;
 let unsubscribe = null;
@@ -546,6 +545,63 @@ function renderTenantGroups(pageKey, tenants, renderBody) {
   }).join("");
 }
 
+// Etichette dell'asse orizzontale: "Gen" con un anno scelto, "Gen 2025" con "Da sempre"
+function formatMonthAxis(indexes, selectedYear, monthsLabels) {
+  return indexes.map(i => selectedYear === "ALL"
+    ? `${monthsLabels[i % 12]} ${Math.floor(i / 12)}`
+    : monthsLabels[i % 12]);
+}
+
+// Entrate, spese e categorie mese per mese.
+// Anno scelto: i 12 mesi dell'anno. "Da sempre": linea temporale reale dal primo all'ultimo mese
+// con almeno una spesa o un bonifico (anni diversi NON vengono più sommati nello stesso mese).
+function computeMonthlySeries(state, selectedYear, monthsLabels) {
+  const parseMonth = date => {
+    const m = String(date || "").match(/^(\d{4})-(\d{2})/);
+    if (!m) return null;
+    const month = Number(m[2]);
+    return month >= 1 && month <= 12 ? Number(m[1]) * 12 + month - 1 : null;
+  };
+
+  const payments = (state.payments || [])
+    .map(p => ({ idx: parseMonth(p.date), amount: Number(p.amount || 0) }))
+    .filter(p => p.idx !== null);
+  const expenses = (state.expenses || [])
+    .map(e => ({ idx: parseMonth(e.date), amount: Number(e.amount || 0), category: e.category }))
+    .filter(e => e.idx !== null);
+
+  const indexes = [];
+  if (selectedYear === "ALL") {
+    const all = payments.map(p => p.idx).concat(expenses.map(e => e.idx));
+    if (all.length) {
+      const first = all.reduce((a, b) => Math.min(a, b));
+      const last = Math.min(all.reduce((a, b) => Math.max(a, b)), first + 599);
+      for (let i = first; i <= last; i++) indexes.push(i);
+    }
+  } else {
+    for (let m = 0; m < 12; m++) indexes.push(Number(selectedYear) * 12 + m);
+  }
+
+  const position = new Map(indexes.map((idx, pos) => [idx, pos]));
+  const zeros = () => new Array(indexes.length).fill(0);
+  const income = zeros();
+  const expense = zeros();
+  const categories = { Luce: zeros(), Gas: zeros(), Acqua: zeros(), Condominio: zeros(), Manutenzione: zeros(), Internet: zeros() };
+
+  payments.forEach(p => {
+    const pos = position.get(p.idx);
+    if (pos !== undefined) income[pos] += p.amount;
+  });
+  expenses.forEach(e => {
+    const pos = position.get(e.idx);
+    if (pos === undefined) return;
+    expense[pos] += e.amount;
+    if (categories[e.category]) categories[e.category][pos] += e.amount;
+  });
+
+  return { labels: formatMonthAxis(indexes, selectedYear, monthsLabels), income, expense, categories };
+}
+
 // Numero di inquilini con contratto attivo in ogni mese
 // ("Da sempre": dal primo inizio contratto all'ultima fine; anno scelto: i 12 mesi dell'anno)
 function computeTenantsMonthly(tenants, selectedYear, monthsLabels) {
@@ -564,9 +620,7 @@ function computeTenantsMonthly(tenants, selectedYear, monthsLabels) {
     for (let m = 0; m < 12; m++) indexes.push(Number(selectedYear) * 12 + m);
   }
 
-  const labels = indexes.map(i => selectedYear === "ALL"
-    ? `${monthsLabels[i % 12]} ${Math.floor(i / 12)}`
-    : monthsLabels[i % 12]);
+  const labels = formatMonthAxis(indexes, selectedYear, monthsLabels);
   const data = indexes.map(i =>
     withDates.filter(t => i >= monthToIndex(t.contractStart) && i <= monthToIndex(t.contractEnd)).length);
 
@@ -665,55 +719,18 @@ function renderDashboardCharts() {
   // 1. DATA: Inquilini con contratto attivo in ciascun mese
   const tenantsMonthly = computeTenantsMonthly(state.tenants, selectedYear, monthsLabels);
 
-  // 2. DATA: Entrate vs Spese
-  const incomeData = new Array(12).fill(0);
-  const expenseData = new Array(12).fill(0);
-
-  (state.payments || []).forEach(p => {
-    if (!p.date) return;
-    const [y, m] = p.date.split("-").map(Number);
-    if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
-      if (m >= 1 && m <= 12) incomeData[m - 1] += Number(p.amount || 0);
-    }
-  });
-
-  (state.expenses || []).forEach(e => {
-    if (!e.date) return;
-    const [y, m] = e.date.split("-").map(Number);
-    if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
-      if (m >= 1 && m <= 12) expenseData[m - 1] += Number(e.amount || 0);
-    }
-  });
-
-  // 3 & 4. DATA: Utenze per Categoria
-  const catData = {
-    Luce: new Array(12).fill(0),
-    Gas: new Array(12).fill(0),
-    Acqua: new Array(12).fill(0),
-    Condominio: new Array(12).fill(0),
-    Manutenzione: new Array(12).fill(0),
-    Internet: new Array(12).fill(0)
-  };
-
-  (state.expenses || []).forEach(e => {
-    if (!e.date || !e.category) return;
-    const [y, m] = e.date.split("-").map(Number);
-    if (selectedYear === "ALL" || String(y) === String(selectedYear)) {
-      if (m >= 1 && m <= 12 && catData[e.category]) {
-        catData[e.category][m - 1] += Number(e.amount || 0);
-      }
-    }
-  });
+  // 2, 3 e 4. DATA: entrate/spese e categorie, sulla stessa linea temporale
+  const series = computeMonthlySeries(state, selectedYear, monthsLabels);
 
   // Converte i valori 0 in null per non tracciare punti vuoti e collegare solo le spese reali
   const cleanUtilityData = (arr) => arr.map(v => v > 0 ? v : null);
 
-  const luceClean = cleanUtilityData(catData.Luce);
-  const gasClean = cleanUtilityData(catData.Gas);
-  const acquaClean = cleanUtilityData(catData.Acqua);
-  const condominioClean = cleanUtilityData(catData.Condominio);
-  const manutenzioneClean = cleanUtilityData(catData.Manutenzione);
-  const internetClean = cleanUtilityData(catData.Internet);
+  const luceClean = cleanUtilityData(series.categories.Luce);
+  const gasClean = cleanUtilityData(series.categories.Gas);
+  const acquaClean = cleanUtilityData(series.categories.Acqua);
+  const condominioClean = cleanUtilityData(series.categories.Condominio);
+  const manutenzioneClean = cleanUtilityData(series.categories.Manutenzione);
+  const internetClean = cleanUtilityData(series.categories.Internet);
 
   // DISTRUZIONE GRAFICI PRECEDENTI (Reset)
   Object.keys(charts).forEach(key => { if (charts[key]) charts[key].destroy(); });
@@ -732,10 +749,10 @@ function renderDashboardCharts() {
   charts.incomeExpenses = new Chart(document.getElementById("chartIncomeExpenses"), {
     type: "bar",
     data: {
-      labels: monthsLabels,
+      labels: series.labels,
       datasets: [
-        { label: "Entrate (Bonifici)", data: incomeData, backgroundColor: "#16a34a", borderRadius: 4 },
-        { label: "Spese Totali", data: expenseData, backgroundColor: "#dc2626", borderRadius: 4 }
+        { label: "Entrate (Bonifici)", data: series.income, backgroundColor: "#16a34a", borderRadius: 4 },
+        { label: "Spese Totali", data: series.expense, backgroundColor: "#dc2626", borderRadius: 4 }
       ]
     },
     options: { responsive: true, scales: { y: { beginAtZero: true } } }
@@ -745,7 +762,7 @@ function renderDashboardCharts() {
   charts.utilitiesMain = new Chart(document.getElementById("chartUtilitiesMain"), {
     type: "line",
     data: {
-      labels: monthsLabels,
+      labels: series.labels,
       datasets: [
         { label: "Luce", data: luceClean, borderColor: "#eab308", backgroundColor: "#fef08a", spanGaps: true, tension: 0.2 },
         { label: "Gas", data: gasClean, borderColor: "#f97316", backgroundColor: "#ffedd5", spanGaps: true, tension: 0.2 },
@@ -762,7 +779,7 @@ function renderDashboardCharts() {
   charts.utilitiesOther = new Chart(document.getElementById("chartUtilitiesOther"), {
     type: "line",
     data: {
-      labels: monthsLabels,
+      labels: series.labels,
       datasets: [
         { label: "Condominio", data: condominioClean, borderColor: "#8b5cf6", backgroundColor: "#f3e8ff", spanGaps: true, tension: 0.2 },
         { label: "Manutenzione", data: manutenzioneClean, borderColor: "#64748b", backgroundColor: "#f1f5f9", spanGaps: true, tension: 0.2 },
