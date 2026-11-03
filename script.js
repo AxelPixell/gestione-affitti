@@ -498,7 +498,7 @@ function toggleSection(contentId, arrowId) {
   sectionState.set(contentId, nowOpen);
 }
 
-// --- Stato degli inquilini in base al contratto (calcolato per mese, come gli affitti maturati) ---
+// --- Stato degli inquilini in base al contratto, confrontato con la data di sistema ---
 function pad2(n) { return String(n).padStart(2, "0"); }
 
 function todayISO() {
@@ -506,10 +506,31 @@ function todayISO() {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function getTenantStatus(tenant) {
-  const current = getCurrentMonthIndex();
-  if (tenant.contractStart && monthToIndex(tenant.contractStart) > current) return "upcoming";
-  if (tenant.contractEnd && monthToIndex(tenant.contractEnd) < current) return "archived";
+// Somma mesi a una data AAAA-MM-GG (31 gen + 1 mese = 28/29 feb)
+function addMonthsISO(iso, months) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const target = new Date(y, m - 1 + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return `${target.getFullYear()}-${pad2(target.getMonth() + 1)}-${pad2(Math.min(d, lastDay))}`;
+}
+
+// Date dei contratti in formato AAAA-MM-GG (accetta anche AAAA-MM: inizio = primo giorno, fine = ultimo giorno)
+function normalizeContractDate(value, isEnd) {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (!m) return "";
+  if (m[3]) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (!isEnd) return `${m[1]}-${m[2]}-01`;
+  return `${m[1]}-${m[2]}-${pad2(new Date(Number(m[1]), Number(m[2]), 0).getDate())}`;
+}
+
+// - In attivazione: la data di inizio è successiva a oggi
+// - Archiviato: la data di fine è precedente a oggi (con chiusura anticipata: già dal giorno di chiusura)
+// - Attivo: tutti gli altri casi
+function getTenantStatus(tenant, today = todayISO()) {
+  const start = normalizeContractDate(tenant.contractStart, false);
+  const end = normalizeContractDate(tenant.contractEnd, true);
+  if (start && start > today) return "upcoming";
+  if (end && (tenant.contractClosedEarly ? end <= today : end < today)) return "archived";
   return "active";
 }
 
@@ -519,9 +540,16 @@ const TENANT_GROUPS = [
   { key: "archived", title: "Archivio", empty: "Nessun inquilino con contratto scaduto.", open: false }
 ];
 
+// Attivi (ordine di inserimento) -> In attivazione (per data di inizio) -> Archivio (chiusura più recente per prima)
 function groupTenants(tenants) {
   const groups = { active: [], upcoming: [], archived: [] };
   (tenants || []).forEach(t => groups[getTenantStatus(t)].push(t));
+
+  const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || ""), "it");
+  groups.upcoming.sort((a, b) =>
+    normalizeContractDate(a.contractStart, false).localeCompare(normalizeContractDate(b.contractStart, false)) || byName(a, b));
+  groups.archived.sort((a, b) =>
+    normalizeContractDate(b.contractEnd, true).localeCompare(normalizeContractDate(a.contractEnd, true)) || byName(a, b));
   return groups;
 }
 
@@ -533,7 +561,7 @@ function renderTenantGroups(pageKey, tenants, renderBody) {
     const contentId = `group_${pageKey}_${def.key}`;
     const arrowId = `${contentId}_arrow`;
     return `
-      <div class="card group-card">
+      <div class="card group-card group-${def.key}">
         <div class="collapsible-header" onclick="toggleSection('${contentId}', '${arrowId}')">
           <h2>${def.title} (${list.length})</h2>
           <span id="${arrowId}" class="arrow-icon">${arrowChar(contentId, def.open)}</span>
@@ -807,6 +835,18 @@ function renderTenantChecks() {
     </label>`).join("");
 }
 
+function tenantStatusBadge(tenant, status) {
+  if (status === "upcoming") {
+    return `<span class="badge badge-warning">Inizia il ${formatDate(tenant.contractStart)}</span>`;
+  }
+  if (status === "archived") {
+    const label = tenant.contractClosedEarly ? "Chiuso in anticipo il" : "Contratto concluso il";
+    return `<span class="badge badge-muted">${label} ${formatDate(tenant.contractEnd)}</span>`;
+  }
+  const label = tenant.contractClosedEarly ? "Attivo · chiusura anticipata il" : "Attivo · scade il";
+  return `<span class="badge badge-success">${tenant.contractEnd ? `${label} ${formatDate(tenant.contractEnd)}` : "Attivo"}</span>`;
+}
+
 function renderTenants() {
   const state = window.getState ? window.getState() : { tenants: [] };
   const container = document.getElementById("tenantsList");
@@ -819,18 +859,216 @@ function renderTenants() {
       <table>
         <thead><tr><th>Nome</th><th>Telefono</th><th>Stanza</th><th>Periodo contratto</th><th>Affitto</th><th>Azioni</th></tr></thead>
         <tbody>
-          ${list.map(tenant => `
-            <tr>
-              <td>${escapeHtml(tenant.name)}</td>
+          ${list.map(tenant => {
+            const status = getTenantStatus(tenant);
+            const deleteButton = status === "archived"
+              ? `<button class="btn-danger" onclick="deleteArchivedTenant('${tenant.id}')">Elimina archiviato</button>`
+              : `<button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Elimina</button>`;
+            return `
+            <tr class="tenant-row tenant-row-${status}">
+              <td>${escapeHtml(tenant.name)}<br>${tenantStatusBadge(tenant, status)}</td>
               <td>${escapeHtml(tenant.phone || "-")}</td>
               <td>${escapeHtml(tenant.room || "-")}</td>
-              <td>${formatMonth(tenant.contractStart)} - ${formatMonth(tenant.contractEnd)}</td>
+              <td>${formatDate(tenant.contractStart)} → ${formatDate(tenant.contractEnd)}</td>
               <td>${money(tenant.monthlyRent)}</td>
-              <td class="actions-cell"><button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Elimina</button></td>
-            </tr>`).join("")}
+              <td class="actions-cell">
+                <button class="btn-primary" onclick="openContractModal('${tenant.id}')">Contratto</button>
+                ${deleteButton}
+              </td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table>
     </div>`);
+}
+
+// --- Contratti: rinnovo / estensione e chiusura anticipata ---
+const STATUS_LABELS = { active: "Attivo", upcoming: "In attivazione", archived: "Archiviato" };
+
+// Valida la richiesta e restituisce il contratto risultante (nessun effetto sui dati)
+function planContractChange(tenant, action, date) {
+  const start = normalizeContractDate(tenant.contractStart, false);
+  const currentEnd = normalizeContractDate(tenant.contractEnd, true);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return { error: "Inserisci una data valida." };
+
+  if (action === "renew") {
+    if (currentEnd && date <= currentEnd) {
+      return { error: `La nuova data di fine deve essere successiva all'attuale scadenza (${formatDate(currentEnd)}). Per anticipare la fine usa «Chiudi in anticipo».` };
+    }
+    const updated = { ...tenant, contractEnd: date };
+    delete updated.contractClosedEarly;
+    return { updated };
+  }
+
+  if (start && date < start) {
+    return { error: `La data di chiusura non può precedere l'inizio del contratto (${formatDate(start)}).` };
+  }
+  if (currentEnd && date > currentEnd) {
+    return { error: `La chiusura anticipata deve cadere entro l'attuale scadenza (${formatDate(currentEnd)}). Per allungare il contratto usa «Rinnova / estendi».` };
+  }
+  return { updated: { ...tenant, contractEnd: date, contractClosedEarly: true } };
+}
+
+function getContractFormValues() {
+  const state = window.getState();
+  const tenant = state.tenants.find(t => t.id === document.getElementById("contractTenantId").value);
+  const action = document.getElementById("contractActionClose").checked ? "close" : "renew";
+  const date = document.getElementById(action === "close" ? "contractCloseDate" : "contractNewEnd").value;
+  return { tenant, action, date };
+}
+
+function updateContractForm() {
+  const { tenant, action, date } = getContractFormValues();
+  document.getElementById("contractRenewBox").style.display = action === "renew" ? "block" : "none";
+  document.getElementById("contractCloseBox").style.display = action === "close" ? "block" : "none";
+
+  const preview = document.getElementById("contractPreview");
+  if (!tenant) { preview.innerHTML = ""; return; }
+
+  const result = planContractChange(tenant, action, date);
+  if (result.error) {
+    preview.innerHTML = `<span class="contract-error">${escapeHtml(result.error)}</span>`;
+    return;
+  }
+
+  const updated = result.updated;
+  const rent = Number(tenant.monthlyRent || 0);
+  const diff = getRentMonths(updated, "ALL").length - getRentMonths(tenant, "ALL").length;
+  const monthsText = n => `${Math.abs(n)} ${Math.abs(n) === 1 ? "mese" : "mesi"}`;
+
+  let rentLine = "Nessuna variazione dell'affitto maturato finora.";
+  if (diff > 0) rentLine = `Affitto maturato: +${monthsText(diff)} (+${money(diff * rent)}) già dovuti fino a oggi.`;
+  if (diff < 0) rentLine = `Affitto maturato: −${monthsText(diff)} (−${money(Math.abs(diff) * rent)}) rispetto a ora.`;
+
+  const status = getTenantStatus(updated);
+  preview.innerHTML = [
+    `Nuovo contratto: ${escapeHtml(formatDate(updated.contractStart))} → ${escapeHtml(formatDate(updated.contractEnd))}`,
+    `Stato risultante: <strong>${STATUS_LABELS[status]}</strong>`,
+    escapeHtml(rentLine)
+  ].join("<br>");
+}
+
+function openContractModal(tenantId) {
+  const state = window.getState();
+  const tenant = state.tenants.find(t => t.id === tenantId);
+  if (!tenant) return;
+
+  const status = getTenantStatus(tenant);
+  const today = todayISO();
+  const start = normalizeContractDate(tenant.contractStart, false);
+  const end = normalizeContractDate(tenant.contractEnd, true);
+
+  document.getElementById("contractTenantId").value = tenantId;
+  document.getElementById("contractTenantLabel").textContent =
+    "Inquilino: " + tenant.name + (tenant.room ? " — stanza " + tenant.room : "");
+  document.getElementById("contractCurrent").textContent =
+    `Contratto attuale: ${formatDate(tenant.contractStart)} → ${formatDate(tenant.contractEnd)} (${STATUS_LABELS[status]}). Affitto mensile: ${money(tenant.monthlyRent)}.`;
+
+  // Rinnovo: proposta di 12 mesi dalla scadenza attuale. Chiusura: oggi, entro inizio e fine del contratto
+  document.getElementById("contractNewEnd").value = addMonthsISO(end || today, 12);
+  let closeDefault = today;
+  if (start && closeDefault < start) closeDefault = start;
+  if (end && closeDefault > end) closeDefault = end;
+  document.getElementById("contractCloseDate").value = closeDefault;
+
+  document.getElementById("contractActionRenew").checked = true;
+  document.getElementById("contractActionClose").checked = false;
+  // Un contratto già archiviato non si può chiudere in anticipo: si può solo rinnovare
+  document.getElementById("contractActionClose").disabled = status === "archived";
+  document.getElementById("contractCloseOption").style.opacity = status === "archived" ? "0.5" : "1";
+
+  updateContractForm();
+  document.getElementById("contractModal").classList.add("open");
+}
+
+function closeContractModal() { document.getElementById("contractModal").classList.remove("open"); }
+
+// Scorciatoie "+3 / +6 / +12 mesi" dalla scadenza attuale
+function setContractQuickExtend(months) {
+  const { tenant } = getContractFormValues();
+  if (!tenant) return;
+  const base = normalizeContractDate(tenant.contractEnd, true) || todayISO();
+  document.getElementById("contractActionRenew").checked = true;
+  document.getElementById("contractActionClose").checked = false;
+  document.getElementById("contractNewEnd").value = addMonthsISO(base, months);
+  updateContractForm();
+}
+
+// --- Cancellazione di un inquilino archiviato ---
+// Elimina l'inquilino, i suoi bonifici e le sue spese. Le spese condivise con altri inquilini
+// non vengono cancellate: si toglie solo la sua quota (importo ridotto) e le quote degli altri restano identiche.
+function planArchivedTenantRemoval(state, tenantId) {
+  const tenant = state.tenants.find(t => t.id === tenantId);
+  const allPayments = state.payments || [];
+  const payments = allPayments.filter(p => p.tenantId === tenantId);
+  const soloExpenses = [];
+  const sharedExpenses = [];
+  const expenses = [];
+
+  (state.expenses || []).forEach(e => {
+    const ids = Array.isArray(e.tenantIds) ? e.tenantIds : [];
+    if (!ids.includes(tenantId)) { expenses.push(e); return; }
+
+    const amount = Number(e.amount || 0);
+    if (ids.length === 1) { soloExpenses.push({ id: e.id, amount }); return; }
+
+    const share = amount / ids.length;
+    sharedExpenses.push({ id: e.id, share });
+    const note = `Quota di ${tenant.name} (${money(share)}) rimossa il ${formatDate(todayISO())}; importo originale ${money(amount)}.`;
+    expenses.push({
+      ...e,
+      amount: amount - share,
+      tenantIds: ids.filter(id => id !== tenantId),
+      notes: e.notes ? `${e.notes} | ${note}` : note
+    });
+  });
+
+  const sum = list => list.reduce((total, item) => total + Number(item.amount ?? item.share ?? 0), 0);
+  return {
+    tenant,
+    payments,
+    paymentsTotal: sum(payments),
+    soloExpenses,
+    soloTotal: sum(soloExpenses),
+    sharedExpenses,
+    sharedTotal: sum(sharedExpenses),
+    balance: getTenantSummary(tenant).balance,
+    next: {
+      tenants: state.tenants.filter(t => t.id !== tenantId),
+      payments: allPayments.filter(p => p.tenantId !== tenantId),
+      expenses
+    }
+  };
+}
+
+async function deleteArchivedTenant(id) {
+  const state = window.getState();
+  const tenant = state.tenants.find(t => t.id === id);
+  if (!tenant) return;
+
+  if (getTenantStatus(tenant) !== "archived") {
+    alert("Questa funzione è riservata agli inquilini archiviati (contratto concluso). Per gli altri usa «Elimina».");
+    return;
+  }
+
+  const plan = planArchivedTenantRemoval(state, id);
+  const lines = [`Eliminare definitivamente l'inquilino archiviato "${tenant.name}"?`, "", "Verranno rimossi dal resoconto complessivo:"];
+  if (plan.payments.length) lines.push(`• ${plan.payments.length} ${plan.payments.length === 1 ? "bonifico" : "bonifici"} (totale ${money(plan.paymentsTotal)})`);
+  if (plan.soloExpenses.length) lines.push(`• ${plan.soloExpenses.length} ${plan.soloExpenses.length === 1 ? "spesa interamente" : "spese interamente"} a suo carico (totale ${money(plan.soloTotal)})`);
+  if (plan.sharedExpenses.length) {
+    lines.push(`• la sua quota da ${plan.sharedExpenses.length} ${plan.sharedExpenses.length === 1 ? "spesa condivisa" : "spese condivise"} (totale ${money(plan.sharedTotal)}): l'importo di ciascuna viene ridotto della sua quota, le quote degli altri inquilini restano invariate`);
+  }
+  if (!plan.payments.length && !plan.soloExpenses.length && !plan.sharedExpenses.length) lines.push("• nessun bonifico o spesa collegati");
+  if (plan.balance > 0.005) lines.push("", `Importo che ancora ti doveva: ${money(plan.balance)} (non sarà più conteggiato in "Totale da ricevere").`);
+  lines.push("", "L'operazione è irreversibile: per conservare i dati esporta prima un backup CSV.");
+
+  if (!confirm(lines.join("\n"))) return;
+
+  state.tenants = plan.next.tenants;
+  state.payments = plan.next.payments;
+  state.expenses = plan.next.expenses;
+  await window.save();
 }
 
 function renderExpenses() {
@@ -1028,9 +1266,9 @@ function exportDataToCSV() {
   let csvContent = "\uFEFF";
 
   csvContent += "=== INQUILINI ===\n";
-  csvContent += "ID;Nome;Telefono;Stanza;Affitto Mensile;Inizio Contratto;Fine Contratto;Note\n";
+  csvContent += "ID;Nome;Telefono;Stanza;Affitto Mensile;Inizio Contratto;Fine Contratto;Note;Chiuso in anticipo\n";
   (state.tenants || []).forEach(t => {
-    csvContent += row([t.id, t.name, t.phone, t.room, t.monthlyRent || 0, t.contractStart, t.contractEnd, t.notes]);
+    csvContent += row([t.id, t.name, t.phone, t.room, t.monthlyRent || 0, t.contractStart, t.contractEnd, t.notes, t.contractClosedEarly ? "1" : ""]);
   });
 
   csvContent += "\n=== SPESE APPARTAMENTO ===\n";
@@ -1138,7 +1376,8 @@ function importDataFromCSV(event) {
             monthlyRent: toNumber(cols[4]),
             contractStart: cols[5] || "",
             contractEnd: cols[6] || "",
-            notes: cols[7] || ""
+            notes: cols[7] || "",
+            ...(cols[8] === "1" ? { contractClosedEarly: true } : {})
           });
         } else if (currentSection === "expenses" && cols.length >= 4) {
           newExpenses.push({
@@ -1244,7 +1483,8 @@ function sendWhatsApp(tenantId) {
 Object.assign(window, {
   toggleSection, toggleChartsToggle, exportDataToCSV, importDataFromCSV, deleteAnnualDataPrompt,
   sendExpenseWhatsApp, sendWhatsApp, deleteTenant, deleteExpense, deletePayment,
-  openPaymentModal, closePaymentModal, renderDashboard, renderExpenses, renderRooms, renderAll
+  openPaymentModal, closePaymentModal, renderDashboard, renderExpenses, renderRooms, renderAll,
+  openContractModal, closeContractModal, setContractQuickExtend, updateContractForm, deleteArchivedTenant
 });
 
 document.getElementById("tenantForm")?.addEventListener("submit", e => {
@@ -1313,6 +1553,30 @@ document.querySelectorAll("nav button[data-page]").forEach(btn => {
   });
 });
 
+document.getElementById("contractForm")?.addEventListener("submit", e => {
+  e.preventDefault();
+  const { tenant, action, date } = getContractFormValues();
+  if (!tenant) return;
+
+  const result = planContractChange(tenant, action, date);
+  if (result.error) { alert(result.error); return; }
+
+  if (action === "close" && !confirm(`Chiudere il contratto di ${tenant.name} il ${formatDate(date)}?\nLo stato risultante sarà: ${STATUS_LABELS[getTenantStatus(result.updated)]}.`)) return;
+
+  const state = window.getState();
+  const index = state.tenants.findIndex(t => t.id === tenant.id);
+  if (index === -1) return;
+  state.tenants[index] = result.updated;
+  window.save();
+  closeContractModal();
+});
+
+["contractNewEnd", "contractCloseDate"].forEach(id =>
+  document.getElementById(id)?.addEventListener("input", updateContractForm));
+["contractActionRenew", "contractActionClose"].forEach(id =>
+  document.getElementById(id)?.addEventListener("change", updateContractForm));
+
 window.addEventListener("click", e => {
   if (e.target === document.getElementById("paymentModal")) closePaymentModal();
+  if (e.target === document.getElementById("contractModal")) closeContractModal();
 });

@@ -2,7 +2,7 @@
 
 Web app per la contabilità di uno o più appartamenti in affitto condiviso: inquilini, spese, bonifici, saldi individuali, grafici e promemoria WhatsApp. I dati sono salvati su Firebase (accesso con Google) e si possono esportare/importare in CSV.
 
-Ultimo aggiornamento di questo documento: 19 ottobre 2026 (grafici su linea temporale).
+Ultimo aggiornamento di questo documento: 19 ottobre 2026 (inquilini archiviati e gestione contratto).
 
 ---
 
@@ -36,7 +36,8 @@ I tre file `index.html`, `style.css` e `script.js` devono stare nella **stessa c
 
 **Inquilini**
 - Form per aggiungere un inquilino (nome, telefono, stanza, affitto mensile, inizio e fine contratto, note).
-- Elenco diviso negli stessi tre riquadri espandibili.
+- Elenco diviso nei tre riquadri espandibili *Inquilini attivi*, *In attivazione*, *Archivio*, con stile distinto (vedi sezione 5).
+- Per ogni inquilino: pulsante **Contratto** (rinnovo/estensione o chiusura anticipata). Per gli archiviati il pulsante di eliminazione è **Elimina archiviato** (vedi sezione 5).
 
 **Spese**
 - Form per registrare una spesa: causale, importo, data, categoria (Luce, Gas, Acqua, Internet, Pulizie, Manutenzione, Condominio, Altro), inquilini coinvolti, note.
@@ -66,21 +67,50 @@ users/{uid}/properties/{propId}   { name, tenants, expenses, payments, updatedAt
 - **Spazio occupato**: la separazione non riduce lo spazio totale. Riduce i dati scritti a ogni salvataggio e porta il limite di 1 MiB di Firestore da "tutti gli appartamenti insieme" a "ogni appartamento".
 - Ogni utente Google ha il proprio spazio `users/{uid}`: cambiando account si vede un database diverso (vuoto, se mai usato).
 
-## 5. Stato degli inquilini
+## 5. Inquilini: stato, contratto e archivio
 
-Calcolato per **mese**, come gli affitti maturati:
+### Stato (confronto con la data di sistema)
+
+Lo stato si calcola **al giorno**, confrontando le date del contratto con la data del dispositivo che visualizza l'app:
 
 | Stato | Condizione |
 |---|---|
-| In attivazione | il mese di inizio contratto è successivo al mese corrente |
-| Archivio | il mese di fine contratto è precedente al mese corrente |
+| In attivazione | la data di inizio contratto è successiva a oggi |
+| Archiviato | la data di fine contratto è precedente a oggi |
+| Archiviato (chiusura anticipata) | contratto chiuso in anticipo e data di chiusura uguale o precedente a oggi |
 | Attivo | tutti gli altri casi (compresi inquilini senza date) |
 
-Un contratto che finisce a metà marzo resta "attivo" fino a fine marzo. Gli inquilini in Archivio mantengono saldo, spese e bonifici e continuano a comparire nei totali.
+Un contratto che finisce oggi è ancora attivo; dal giorno dopo passa in Archivio. Le date salvate nel vecchio formato AAAA-MM vengono lette come primo giorno (inizio) e ultimo giorno (fine) del mese. Lo stato si aggiorna quando la pagina viene ridisegnata (cambio scheda, salvataggio, ricarica): se lasci l'app aperta oltre la mezzanotte, ricarica la pagina.
+
+Gli archiviati mantengono saldo, spese e bonifici e continuano a comparire nei totali, finché non vengono eliminati.
+
+### Ordine e stile
+
+- Ordine ovunque compaiano gli inquilini (Dashboard, Inquilini, Stanze): prima **Attivi** (ordine di inserimento), poi **In attivazione** (per data di inizio), poi **Archivio** (dalla chiusura più recente alla più vecchia).
+- Nella pagina Inquilini ogni stato ha un aspetto diverso: righe con barra verde e badge "Attivo · scade il ..." per gli attivi; barra arancione e "Inizia il ..." per quelli in attivazione; righe grigie e badge "Contratto concluso il ..." o "Chiuso in anticipo il ..." per gli archiviati. Il periodo di contratto è mostrato con le date complete.
+
+### Contratto: rinnovo / estensione e chiusura anticipata
+
+Il pulsante **Contratto** (su ogni inquilino) apre una finestra con il contratto attuale e due scelte:
+
+- **Rinnova / estendi**: nuova data di fine (deve essere successiva all'attuale scadenza), con le scorciatoie +3, +6, +12 mesi dalla scadenza attuale. Su un archiviato con data nel futuro, l'inquilino torna attivo.
+- **Chiudi in anticipo**: data di chiusura (proposta: oggi; deve cadere tra l'inizio del contratto e l'attuale scadenza). Con la data di oggi l'inquilino passa subito in Archivio. Non disponibile per gli inquilini già archiviati.
+
+Prima di applicare, la finestra mostra il contratto risultante, lo stato risultante e come cambia l'**affitto maturato**: ad esempio, rinnovare un contratto scaduto da sei mesi addebita all'inquilino i sei mesi trascorsi, perché per l'app il contratto è unico e continuo (vedi sezione 6). La chiusura anticipata chiede una conferma.
+
+### Cancellazione di un inquilino archiviato
+
+Il pulsante **Elimina archiviato** (solo sugli archiviati) rimuove dal resoconto complessivo:
+
+- l'inquilino;
+- tutti i **bonifici** da lui effettuati;
+- le **spese a suo carico**: quelle intestate solo a lui vengono eliminate; per quelle **condivise** con altri inquilini si toglie solo la sua quota (l'importo della spesa si riduce della quota e lui esce dall'elenco degli inquilini coinvolti), così le quote degli altri restano identiche. Nelle note della spesa viene aggiunta la dicitura con la quota rimossa e l'importo originale.
+
+Prima di procedere compare un riepilogo con numero e totale di bonifici e spese, e l'importo che l'inquilino doveva ancora (che non verrà più contato in "Totale da ricevere"). L'operazione è irreversibile: esporta prima un backup CSV. Per gli inquilini attivi o in attivazione resta il pulsante **Elimina**, che toglie solo l'inquilino (vedi sezione 13).
 
 ## 6. Calcolo dei saldi
 
-- **Affitti maturati**: un mese per ogni mese compreso tra inizio e fine contratto, **fino al mese corrente** (i mesi futuri non maturano ancora) × affitto mensile.
+- **Affitti maturati**: un mese per ogni mese compreso tra inizio e fine contratto, **fino al mese corrente** (i mesi futuri non maturano ancora) × affitto mensile. Il mese della data di fine (o di chiusura anticipata) conta per intero.
 - **Quota spesa**: importo ÷ numero di inquilini selezionati nella spesa.
 - **Totale dovuto** = affitti maturati + quote spese.
 - **Da pagare** = totale dovuto − bonifici (mostrato solo se positivo).
@@ -109,6 +139,7 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 ## 9. Export / Import CSV
 
 - File con separatore `;`, codifica UTF-8 con BOM, tre sezioni: `=== INQUILINI ===`, `=== SPESE APPARTAMENTO ===`, `=== BONIFICI INQUILINI ===`, ciascuna con la riga di intestazione.
+- La sezione inquilini ha la colonna finale **Chiuso in anticipo** (`1` se il contratto è stato chiuso in anticipo). I file esportati in precedenza, senza questa colonna, si importano normalmente.
 - Tutti i campi sono tra virgolette, con `"` raddoppiate: nomi e note con virgolette, `;` o a capo si esportano e reimportano correttamente.
 - L'esportazione riguarda l'**appartamento attivo**. Nei bonifici di un inquilino non più presente il nome è "Sconosciuto" (il nome serve solo alla lettura: all'import contano ID inquilino, data, causale, importo, note).
 - L'importazione **sostituisce** inquilini, spese e bonifici dell'appartamento attivo, dopo una conferma che mostra quanti record sono stati trovati. Importi con virgola (`350,50`) o con punto (`350.5`) sono accettati. Un file senza struttura valida viene rifiutato.
@@ -149,6 +180,13 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 **Terza revisione**
 - Grafici 2, 3 e 4 con "Da sempre": ora usano una linea temporale reale (mese e anno) invece di sommare lo stesso mese di anni diversi.
 
+**Quarta revisione**
+- Stato degli inquilini calcolato al giorno rispetto alla data di sistema (prima: al mese).
+- Pagina Inquilini: stile distinto per attivi, in attivazione e archiviati; archiviati ordinati per data di chiusura.
+- Funzione Contratto per ogni inquilino: rinnovo/estensione e chiusura anticipata, con anteprima dell'effetto sull'affitto maturato.
+- Funzione Elimina archiviato: rimuove inquilino, bonifici e spese a suo carico dal resoconto complessivo.
+- CSV: nuova colonna "Chiuso in anticipo"; `reset_database_vuoto.csv` aggiornato.
+
 ---
 
 ## 13. Errori e limiti noti NON ancora corretti
@@ -164,12 +202,16 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 6. **Senza accesso** i form non salvano nulla: compare l'avviso e si apre il login.
 7. **Selezione account Google non forzata**: il login può riproporre subito l'ultimo account. Soluzione (non applicata): `provider.setCustomParameters({ prompt: "select_account" });` dopo la creazione di `provider`.
 8. **CSV e Excel**: l'export scrive i decimali con il punto (`120.5`). L'app li reimporta correttamente, ma Excel con impostazioni italiane può non riconoscerli come numeri se apri e risalvi il file.
-9. **Inquilino eliminato**: i suoi bonifici restano (voluto). Nelle spese a lui collegate il suo id resta tra i coinvolti, quindi la quota degli altri non cambia e nel messaggio WhatsApp compare "Inquilino".
+9. **Eliminazione con «Elimina»** (inquilini attivi o in attivazione): toglie solo l'inquilino. I suoi bonifici restano (nell'export compaiono come "Sconosciuto") e nelle spese a lui collegate il suo id resta tra i coinvolti, quindi la quota degli altri non cambia e nel messaggio WhatsApp compare "Inquilino". Per ripulire tutto, archivia l'inquilino (chiusura anticipata) e usa «Elimina archiviato».
 10. **Saldo per anno**: un bonifico conta nell'anno della sua data, anche se salda debiti di anni precedenti.
 11. **Eliminazione per anno e importazione** sono irreversibili: esporta sempre un backup prima.
 12. **Grafici con "Da sempre"**: l'intervallo è limitato a 600 mesi (protezione contro date errate). Con molti anni di dati l'asse orizzontale diventa fitto e Chart.js salta alcune etichette.
 13. **Limite di 1 MiB per appartamento**: invariato (un appartamento con molte migliaia di spese e bonifici potrebbe raggiungerlo).
 14. **Documento storico** `users/{uid}`: scrivibile finché non cambi la regola.
+16. **Rinnovo di un contratto scaduto**: l'app ha un solo contratto continuo per inquilino, quindi i mesi tra la vecchia scadenza e oggi vengono addebitati (l'anteprima li mostra). Non è possibile rappresentare un periodo di assenza tra due contratti.
+17. **Elimina archiviato sulle spese condivise**: l'importo originale della spesa viene ridotto (resta scritto nelle note). Il totale spese dell'appartamento diminuisce della quota stralciata; l'operazione non si può annullare.
+18. **Stanze e Dashboard**: il pulsante Contratto e la cancellazione degli archiviati sono solo nella pagina Inquilini.
+19. **Data di sistema**: lo stato usa la data del dispositivo (fuso locale). Con data o orologio errati gli inquilini cambiano stato di conseguenza.
 
 **Non verificato**
-15. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.
+20. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset, stati degli inquilini, contratto, cancellazione degli archiviati). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.

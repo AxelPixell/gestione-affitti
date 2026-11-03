@@ -1,0 +1,157 @@
+MODIFICHE EXTRA APPORTATE IN QUESTA CONVERSAZIONE
+(cioè modifiche non richieste esplicitamente, oppure che vanno oltre quanto chiesto)
+Aggiornato al 19 ottobre 2026 (include la quarta richiesta)
+
+================================================================================
+1) PRIMA RICHIESTA (controllo errori + CSV di reset)
+================================================================================
+Hai chiesto di cercare gli errori e di generare il CSV vuoto. Oltre a questo:
+
+- Ho CORRETTO direttamente gli errori trovati, invece di limitarmi a segnalarli:
+  * "Nuovo appartamento" non copia più i dati dell'appartamento precedente.
+  * L'eliminazione di un appartamento non sovrascrive più quello rimasto.
+  * WhatsApp: il numero viene ripulito (solo cifre, senza zeri iniziali) prima di
+    costruire il link wa.me.
+  * Rimosso un commento residuo ("STREAMING_CHUNK").
+- Ho RISCRITTO l'importazione CSV (necessario per far funzionare il reset, ma con
+  miglioramenti ulteriori):
+  * lettura corretta di campi tra virgolette con ";" o a capo all'interno;
+  * importi con la virgola decimale ("350,50") letti correttamente;
+  * data del bonifico non più sostituita dal nome dell'inquilino;
+  * ID ripuliti dai caratteri speciali (evitano problemi negli attributi onclick);
+  * messaggio di conferma con il numero di inquilini, spese e bonifici trovati;
+  * messaggio di conferma dedicato quando il file è vuoto (azzeramento).
+- Ho consegnato anche una copia corretta di index.html (poi sostituita dalla
+  versione divisa in tre file).
+
+================================================================================
+2) SECONDA RICHIESTA (sezioni inquilini, grafico 1, schede aperte, Firebase, 3 file)
+================================================================================
+
+Sezioni Attivi / In attivazione / Archivio
+- Le tre sezioni sono state applicate a TRE pagine (Dashboard, Inquilini, Stanze),
+  non solo al riquadro indicato, per mantenere coerenza.
+- Lo stato dell'inquilino è calcolato a livello di MESE (come gli affitti maturati),
+  non al giorno.
+- Dashboard: il riquadro "Situazione inquilini" ora contiene solo titolo e filtro
+  anno; le tabelle sono nei tre riquadri separati sotto di esso.
+- Pagina Inquilini: tolto il riquadro esterno "Elenco inquilini" (il titolo è
+  sostituito dai titoli delle tre sezioni; resta solo nel messaggio "nessun
+  inquilino").
+- Stanze: le schede dei singoli inquilini sono dentro i riquadri di gruppo; ho
+  aggiunto regole CSS per evitare l'effetto "scheda dentro scheda".
+- Ogni sezione mostra il numero di inquilini nel titolo e un messaggio se è vuota.
+
+Grafico 1
+- Etichetta della serie rinominata in "Inquilini con contratto attivo" e opzioni
+  degli assi riscritte (asse Y con passo intero).
+- Con "Da sempre" l'intervallo è limitato a 600 mesi per proteggere da date errate.
+
+Schede aperte dopo il salvataggio
+- Gli id delle schede degli inquilini ora si basano sull'id dell'inquilino invece
+  che sulla posizione nell'elenco (prima: indice), così lo stato non si sposta se
+  ne elimini uno.
+
+Firebase (un documento per appartamento)
+- Aggiunto il campo updatedAt (timestamp numerico) in ogni documento appartamento.
+- Prima di scrivere, i dati vengono "puliti" (nessun valore undefined) e ogni
+  appartamento viene normalizzato (liste sempre presenti, tenantIds sempre una lista).
+- Il cambio di appartamento ora salva solo la scelta (settings/app) e non più tutti i
+  dati.
+- L'appartamento attivo viene letto una volta al login e non è più sincronizzato in
+  tempo reale tra dispositivi (prima viaggiava nel documento unico).
+- Creare, rinominare o eliminare un appartamento ora richiede di aver fatto il
+  login (altrimenti compare l'avviso e si apre l'accesso).
+- Se sul server non esiste nessun appartamento, l'app ne crea uno vuoto
+  ("Appartamento 1").
+- Messaggio dedicato "Permessi Firestore insufficienti: aggiorna le regole" se le
+  regole non sono state pubblicate.
+- La migrazione usa una transazione (scrive tutto o niente) ed è sicura anche se
+  due dispositivi accedono insieme la prima volta.
+- Creato anche il file firestore.rules (hai chiesto di suggerire le regole), con
+  controlli aggiuntivi: campi ammessi, tipi, nome fino a 100 caratteri, massimo 200
+  inquilini, accesso solo al proprietario.
+
+Divisione in tre file
+- script.js è ora un modulo ES: le funzioni richiamate dagli onclick/onchange
+  dell'HTML sono state esposte su window con un blocco apposito.
+- Aggiunti commenti descrittivi in testa alle sezioni di script.js.
+
+Altre correzioni non richieste
+- Esportazione CSV: tutti i campi sono ora tra virgolette con le " raddoppiate
+  (prima un nome con le virgolette rompeva il file).
+- La data proposta nel modale del bonifico e quella nel nome del file esportato
+  usano il fuso orario locale (prima UTC: tra mezzanotte e le 2 poteva risultare il
+  giorno precedente).
+
+Verifica
+- Ho scritto ed eseguito test con un Firestore e un DOM simulati (non consegnati):
+  migrazione, salvataggi, creazione/eliminazione/rinomina appartamenti, sezioni,
+  schede aperte, grafico 1, esportazione/importazione e reset.
+
+================================================================================
+3) TERZA RICHIESTA (grafici 2, 3 e 4 su linea temporale)
+================================================================================
+Hai chiesto di applicare la linea temporale a tutti i grafici. Oltre a questo:
+
+- Con "Da sempre" i grafici 2, 3 e 4 condividono un intervallo di mesi basato sulle
+  date di spese e bonifici (dal primo all'ultimo movimento), che può quindi essere
+  diverso da quello del grafico 1, basato sui contratti. L'intervallo non è stato
+  unificato tra i quattro grafici.
+- Anche per questi grafici l'intervallo è limitato a 600 mesi.
+- Le etichette dell'asse ("Gen" / "Gen 2025") sono ora generate da una funzione
+  condivisa (formatMonthAxis), usata anche dal grafico 1: output identico a prima.
+- Le date non valide di spese e bonifici (formato diverso da AAAA-MM-GG o mese fuori
+  da 1-12) vengono ignorate nei grafici invece di finire in una colonna errata.
+- Aggiornati il README (sezione 7, registro modifiche, elenco errori noti: rimossa
+  la voce sui grafici sommati e rinumerate le altre).
+- Verifica: test con dati su 16 mesi in due anni, anno singolo, anno senza dati e
+  assenza di dati (con Firestore e DOM simulati).
+
+================================================================================
+4) QUARTA RICHIESTA (inquilini archiviati, contratto, cancellazione archiviati)
+================================================================================
+Cambi di comportamento rispetto alle revisioni precedenti
+- Lo stato degli inquilini passa da calcolo "per mese" a calcolo "al giorno" rispetto
+  alla data di sistema: un contratto che finisce a metà marzo ora è archiviato dal
+  16 marzo (prima restava attivo fino a fine marzo). L'affitto maturato resta
+  calcolato per mese (il mese di fine conta per intero).
+- Per gli inquilini archiviati il pulsante "Elimina" è sostituito da "Elimina
+  archiviato" (rimuove anche bonifici e spese); per attivi e in attivazione resta
+  "Elimina", che lascia i bonifici ("Sconosciuto"), come deciso in precedenza.
+
+Aggiunte non esplicitamente richieste
+- Nuovo campo contractClosedEarly sull'inquilino (serve a archiviare subito una
+  chiusura anticipata con data di oggi) e nuova colonna CSV "Chiuso in anticipo";
+  l'importazione resta compatibile con i vecchi file (8 colonne) e il file
+  reset_database_vuoto.csv è stato aggiornato con la nuova intestazione.
+- L'ordinamento (attivi, poi in attivazione per data di inizio, poi archiviati dalla
+  chiusura più recente) è applicato anche a Dashboard e Stanze, non solo a Inquilini.
+- I riquadri dei tre gruppi hanno un bordo superiore colorato in tutte le pagine
+  (verde, arancione, grigio); lo stile delle righe vale solo nella pagina Inquilini.
+- Nella tabella Inquilini il periodo di contratto mostra le date complete (prima
+  solo mese e anno) e ogni inquilino ha un badge con la data di scadenza/chiusura.
+- Modale Contratto: scorciatoie +3/+6/+12 mesi dalla scadenza attuale; anteprima di
+  stato risultante e variazione dell'affitto maturato; validazioni (il rinnovo deve
+  superare la scadenza, la chiusura deve cadere tra inizio e scadenza); conferma per
+  la chiusura anticipata; chiusura non disponibile per gli archiviati; clic fuori
+  dalla finestra per chiuderla.
+- Cancellazione di un archiviato: le spese condivise con altri NON vengono eliminate;
+  si toglie solo la quota dell'inquilino (importo ridotto, quote degli altri
+  invariate) e nelle note si aggiunge la quota rimossa e l'importo originale. Il
+  riepilogo di conferma mostra anche l'importo che l'inquilino doveva ancora.
+- Il pulsante Contratto e la cancellazione sono solo nella pagina Inquilini.
+- Test con Firestore e DOM simulati (non consegnati): stati per data (compreso il
+  vecchio formato AAAA-MM), ordinamento, stile, rinnovo, chiusura, errori di
+  validazione, cancellazione con spese condivise e invarianza delle quote degli
+  altri, esporta/importa con la nuova colonna, CSV di reset, e ripetuti i test dei
+  grafici.
+- Aggiornati README (sezioni 3, 5, 6, 9, 12, 13) e questo elenco.
+
+================================================================================
+5) ALTRE RICHIESTE (senza modifiche al codice)
+================================================================================
+- Cambio account Google: ho solo suggerito di aggiungere
+  provider.setCustomParameters({ prompt: "select_account" }); NON applicato al codice.
+- Trascrizione delle regole Firebase: nessuna modifica ai file.
+- Questa richiesta: creati README.md e questo elenco; nessuna modifica al codice.

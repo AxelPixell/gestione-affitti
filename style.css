@@ -379,3 +379,32 @@ td.actions-cell { white-space: nowrap; }
 
 .group-card .collapsible-content > .tenant-card:last-child { margin-bottom: 0; }
 .group-card .collapsible-content > .empty { margin: 0; }
+
+/* Stati dei contratti: Attivi / In attivazione / Archivio */
+.group-card.group-active { border-top: 4px solid var(--success); }
+.group-card.group-upcoming { border-top: 4px solid var(--warning); }
+.group-card.group-archived { border-top: 4px solid #9ca3af; background: #f9fafb; }
+
+.badge-warning { color: #92400e; background: #fef3c7; }
+.badge-muted { color: #4b5563; background: #e5e7eb; }
+
+.tenant-row td:first-child { border-left: 4px solid transparent; }
+.tenant-row-active td:first-child { border-left-color: var(--success); }
+.tenant-row-upcoming td:first-child { border-left-color: var(--warning); }
+.tenant-row-archived td { background: #f3f4f6; color: var(--muted); }
+.tenant-row-archived td:first-child { border-left-color: #9ca3af; }
+.tenant-row .badge { margin-top: 4px; }
+
+td.actions-cell button + button { margin-left: 6px; }
+
+/* Modale contratto */
+.quick-buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.contract-preview {
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.contract-error { color: #991b1b; font-weight: bold; }

@@ -214,6 +214,48 @@
     </div>
   </div>
 
+  <!-- MODALE CONTRATTO -->
+  <div id="contractModal" class="modal">
+    <div class="modal-content">
+      <button class="close" onclick="closeContractModal()">×</button>
+      <h2>Gestisci contratto</h2>
+      <p id="contractTenantLabel" class="muted"></p>
+      <p id="contractCurrent"></p>
+      <form id="contractForm">
+        <input type="hidden" id="contractTenantId">
+
+        <div class="field">
+          <label class="check-item"><input type="radio" id="contractActionRenew" name="contractAction" checked> Rinnova / estendi il contratto</label>
+          <label class="check-item" id="contractCloseOption" style="margin-top: 8px;"><input type="radio" id="contractActionClose" name="contractAction"> Chiudi il contratto in anticipo (archivia l'inquilino)</label>
+        </div>
+
+        <div id="contractRenewBox" class="field">
+          <label for="contractNewEnd">Nuova data di fine contratto *</label>
+          <input id="contractNewEnd" type="date">
+          <div class="quick-buttons">
+            <button type="button" class="btn-secondary" onclick="setContractQuickExtend(3)">+3 mesi</button>
+            <button type="button" class="btn-secondary" onclick="setContractQuickExtend(6)">+6 mesi</button>
+            <button type="button" class="btn-secondary" onclick="setContractQuickExtend(12)">+12 mesi</button>
+            <small class="muted">dalla scadenza attuale</small>
+          </div>
+        </div>
+
+        <div id="contractCloseBox" class="field" style="display: none;">
+          <label for="contractCloseDate">Data di chiusura del contratto *</label>
+          <input id="contractCloseDate" type="date">
+          <small class="muted">Con la data di oggi l'inquilino passa subito in Archivio.</small>
+        </div>
+
+        <div id="contractPreview" class="contract-preview"></div>
+
+        <div class="actions">
+          <button class="btn-primary" type="submit">Applica</button>
+          <button class="btn-secondary" type="button" onclick="closeContractModal()">Annulla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script type="module" src="script.js"></script>
 </body>
 </html>
