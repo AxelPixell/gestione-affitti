@@ -1,6 +1,6 @@
 MODIFICHE EXTRA APPORTATE IN QUESTA CONVERSAZIONE
 (cioè modifiche non richieste esplicitamente, oppure che vanno oltre quanto chiesto)
-Aggiornato al 19 ottobre 2026 (include la quarta richiesta)
+Aggiornato al 19 ottobre 2026 (include la quinta richiesta)
 
 ================================================================================
 1) PRIMA RICHIESTA (controllo errori + CSV di reset)
@@ -149,7 +149,23 @@ Aggiunte non esplicitamente richieste
 - Aggiornati README (sezioni 3, 5, 6, 9, 12, 13) e questo elenco.
 
 ================================================================================
-5) ALTRE RICHIESTE (senza modifiche al codice)
+5) QUINTA RICHIESTA (messaggio "ultimo bonifico" nell'intestazione)
+================================================================================
+- Interpretazione: il messaggio mostra la data PIÙ RECENTE tra quelle dei bonifici
+  registrati (campo "data" del bonifico), non il momento in cui l'ultimo bonifico è
+  stato inserito: i bonifici non hanno una data di inserimento.
+- Il messaggio compare solo dopo l'accesso; senza bonifici mostra "Nessun bonifico
+  registrato" (testo non richiesto). I bonifici con data non valida vengono ignorati
+  e quelli di inquilini non più presenti sono conteggiati.
+- Il messaggio è nel tag <header>, sotto il selettore appartamento e sopra il menu,
+  con una piccola regola CSS (colore chiaro, nascosto se vuoto).
+- Test con Firestore e DOM simulati: più bonifici in ordine sparso, data non valida,
+  nuovo bonifico, eliminazione del più recente, nessun bonifico, cambio appartamento,
+  logout e posizione nell'HTML.
+- Aggiornati README (sezioni 3, 12, 13) e questo elenco.
+
+================================================================================
+6) ALTRE RICHIESTE (senza modifiche al codice)
 ================================================================================
 - Cambio account Google: ho solo suggerito di aggiungere
   provider.setCustomParameters({ prompt: "select_account" }); NON applicato al codice.

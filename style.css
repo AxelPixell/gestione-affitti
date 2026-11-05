@@ -408,3 +408,12 @@ td.actions-cell button + button { margin-left: 6px; }
   margin: 10px 0;
 }
 .contract-error { color: #991b1b; font-weight: bold; }
+
+/* Messaggio nell'intestazione: ultimo bonifico registrato */
+.last-payment-notice {
+  margin: -5px 0 15px;
+  font-size: 14px;
+  color: #d1d5db;
+}
+.last-payment-notice:empty { display: none; }
+

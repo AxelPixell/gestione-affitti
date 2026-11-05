@@ -668,7 +668,33 @@ function toggleChartsToggle() {
   }
 }
 
+// Data dell'ultimo bonifico registrato (la più recente tra le date dei bonifici), nel formato gg/mm/aaaa
+function formatDMY(isoDate) {
+  const m = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+function getLastPaymentDate(payments) {
+  let latest = "";
+  (payments || []).forEach(p => {
+    const m = String(p.date || "").match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m && m[1] > latest) latest = m[1];
+  });
+  return latest;
+}
+
+function updateLastPaymentNotice() {
+  const notice = document.getElementById("lastPaymentNotice");
+  if (!notice) return;
+  if (!currentUser) { notice.textContent = ""; return; } // senza accesso non ci sono dati da mostrare
+
+  const state = window.getState ? window.getState() : { payments: [] };
+  const latest = getLastPaymentDate(state.payments);
+  notice.textContent = latest ? `Ultimo bonifico aggiunto il ${formatDMY(latest)}` : "Nessun bonifico registrato";
+}
+
 function renderAll() {
+  updateLastPaymentNotice();
   updateYearDropdowns();
   renderDashboard();
   renderTenantChecks();

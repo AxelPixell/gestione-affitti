@@ -2,7 +2,7 @@
 
 Web app per la contabilità di uno o più appartamenti in affitto condiviso: inquilini, spese, bonifici, saldi individuali, grafici e promemoria WhatsApp. I dati sono salvati su Firebase (accesso con Google) e si possono esportare/importare in CSV.
 
-Ultimo aggiornamento di questo documento: 19 ottobre 2026 (inquilini archiviati e gestione contratto).
+Ultimo aggiornamento di questo documento: 19 ottobre 2026 (inquilini archiviati, gestione contratto, messaggio ultimo bonifico).
 
 ---
 
@@ -27,6 +27,10 @@ I tre file `index.html`, `style.css` e `script.js` devono stare nella **stessa c
 4. Quando hai verificato i dati, nelle regole cambia la riga del vecchio documento `users/{userId}` in `allow read, write: if false;`, così non viene più modificato.
 
 ## 3. Schede dell'app
+
+**Intestazione (visibile in tutte le schede)**
+- Selettore e gestione appartamenti (cambio, rinomina, nuovo, esporta, importa, elimina) e, sotto, il messaggio **"Ultimo bonifico aggiunto il gg/mm/aaaa"**.
+- La data è la più recente tra le date dei bonifici dell'appartamento selezionato (compresi quelli di inquilini non più presenti). Se non ce ne sono: "Nessun bonifico registrato". Senza accesso il messaggio non compare. Si aggiorna a ogni salvataggio e al cambio di appartamento.
 
 **Dashboard**
 - Quattro riquadri: *Inquilini attivi* (solo contratti in corso), *Numero spese*, *Totale spese*, *Totale da ricevere*.
@@ -187,6 +191,9 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 - Funzione Elimina archiviato: rimuove inquilino, bonifici e spese a suo carico dal resoconto complessivo.
 - CSV: nuova colonna "Chiuso in anticipo"; `reset_database_vuoto.csv` aggiornato.
 
+**Quinta revisione**
+- Intestazione: messaggio con la data dell'ultimo bonifico (gg/mm/aaaa), visibile in tutte le schede sotto la gestione dell'appartamento.
+
 ---
 
 ## 13. Errori e limiti noti NON ancora corretti
@@ -213,5 +220,8 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 18. **Stanze e Dashboard**: il pulsante Contratto e la cancellazione degli archiviati sono solo nella pagina Inquilini.
 19. **Data di sistema**: lo stato usa la data del dispositivo (fuso locale). Con data o orologio errati gli inquilini cambiano stato di conseguenza.
 
+**Ultimo bonifico**
+20. Il messaggio nell'intestazione mostra la data più recente tra i bonifici, non il momento in cui l'ultimo è stato inserito: un bonifico inserito oggi ma datato in passato non cambia il messaggio. I bonifici con data non valida vengono ignorati.
+
 **Non verificato**
-20. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset, stati degli inquilini, contratto, cancellazione degli archiviati). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.
+21. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset, stati degli inquilini, contratto, cancellazione degli archiviati, messaggio dell'ultimo bonifico). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.
