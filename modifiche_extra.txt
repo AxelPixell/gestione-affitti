@@ -1,6 +1,6 @@
 MODIFICHE EXTRA APPORTATE IN QUESTA CONVERSAZIONE
 (cioè modifiche non richieste esplicitamente, oppure che vanno oltre quanto chiesto)
-Aggiornato al 19 ottobre 2026 (include la quinta richiesta)
+Aggiornato al 19 ottobre 2026 (include la sesta richiesta)
 
 ================================================================================
 1) PRIMA RICHIESTA (controllo errori + CSV di reset)
@@ -165,7 +165,53 @@ Aggiunte non esplicitamente richieste
 - Aggiornati README (sezioni 3, 12, 13) e questo elenco.
 
 ================================================================================
-6) ALTRE RICHIESTE (senza modifiche al codice)
+6) SESTA RICHIESTA (spese ricorrenti)
+================================================================================
+Scelte progettuali non specificate nella richiesta
+- Aggiunta la "Data di inizio" (necessaria per sapere da quando parte la spesa);
+  la spesa si ripete OGNI MESE nello stesso giorno (ultimo giorno se il mese è più
+  corto). Non esistono altre cadenze (settimanale, annuale...).
+- L'importo inserito è MENSILE e fisso; per cambiarlo si interrompe la serie e se ne
+  crea un'altra.
+- Le occorrenze non vengono salvate una per una: si calcolano fino alla data di
+  sistema. Quelle future compaiono quando la loro data arriva (quindi nessuna
+  previsione nei grafici). Scelta mia: la richiesta non lo precisava.
+- "Cancellare da un certo punto in poi" realizzato come INTERRUZIONE dalla data scelta
+  (compresa), con anteprima di quante occorrenze già registrate vengono rimosse e
+  conferma. Aggiunti anche: pulsante "Interrompi da qui" su ogni occorrenza
+  dell'elenco spese e pulsante "Elimina" per cancellare tutta la serie.
+- La data di interruzione deve essere successiva alla data di inizio (altrimenti si
+  usa "Elimina").
+- Il periodo a mesi accetta da 1 a 600 mesi.
+
+Effetti su altre funzioni (non richiesti ma necessari per coerenza)
+- Riquadri Dashboard "Spese registrate" e "Totale spese" includono le occorrenze.
+- Il menu degli anni (filtri e "Elimina per anno") considera anche gli anni delle
+  occorrenze.
+- "Elimina per anno" ora rimuove anche le occorrenze ricorrenti di quell'anno: nella
+  serie viene registrato l'anno escluso (campo excludeYears); il messaggio di
+  conferma mostra quante occorrenze ricorrenti verranno tolte.
+- CSV: nuova sezione "=== SPESE RICORRENTI ===" (esportazione e importazione); un
+  file senza questa sezione, importato, azzera le spese ricorrenti
+  dell'appartamento. Il messaggio di conferma dell'importazione cita le spese
+  ricorrenti. reset_database_vuoto.csv aggiornato.
+- Firestore: il campo "recurring" è scritto nel documento dell'appartamento solo se
+  esiste almeno una spesa ricorrente; firestore.rules aggiornato (campo ammesso,
+  lista di massimo 200 voci). Le regole vanno ripubblicate prima di creare la prima
+  spesa ricorrente, altrimenti il salvataggio viene rifiutato.
+- Le categorie del modulo sono copiate all'avvio da quelle delle spese classiche.
+- Non toccano i saldi degli inquilini né le schede Stanze (nessun inquilino).
+- Stile: badge "Ricorrente" blu e barra blu a sinistra delle righe ricorrenti
+  nell'elenco spese.
+- Test con Firestore e DOM simulati (non consegnati): validazioni, durata
+  indeterminata e a periodo, giorno 31, elenco, riquadri, grafici per categoria,
+  interruzione (passata e futura), eliminazione serie, eliminazione per anno, CSV
+  (anche file vecchio e reset) e campo Firestore; regressione su stati inquilini,
+  ultimo bonifico e CSV inquilini.
+- Aggiornati README (sezioni 3, 4, 5-bis, 9, 11, 12, 13) e questo elenco.
+
+================================================================================
+7) ALTRE RICHIESTE (senza modifiche al codice)
 ================================================================================
 - Cambio account Google: ho solo suggerito di aggiungere
   provider.setCustomParameters({ prompt: "select_account" }); NON applicato al codice.

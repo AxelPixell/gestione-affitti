@@ -41,7 +41,7 @@ let rootData = {
   properties: {}
 };
 
-let state = { tenants: [], expenses: [], payments: [] };
+let state = { tenants: [], expenses: [], payments: [], recurring: [] };
 
 const legacyRef = uid => doc(db, "users", uid);
 const settingsRef = uid => doc(db, "users", uid, "settings", "app");
@@ -59,20 +59,24 @@ function normalizeProperty(p) {
       ...e,
       tenantIds: Array.isArray(e && e.tenantIds) ? e.tenantIds : []
     })),
-    payments: Array.isArray(src.payments) ? src.payments : []
+    payments: Array.isArray(src.payments) ? src.payments : [],
+    recurring: (Array.isArray(src.recurring) ? src.recurring : []).filter(r => r && r.id)
   };
 }
 
 // Documento da scrivere su Firestore (solo i campi ammessi dalle regole; niente valori undefined)
 function toPropertyPayload(p) {
   const clean = normalizeProperty(p);
-  return JSON.parse(JSON.stringify({
+  const payload = {
     name: clean.name || "Appartamento",
     tenants: clean.tenants,
     expenses: clean.expenses,
     payments: clean.payments,
     updatedAt: Date.now()
-  }));
+  };
+  // Il campo compare nel documento solo quando esistono spese ricorrenti
+  if (clean.recurring.length) payload.recurring = clean.recurring;
+  return JSON.parse(JSON.stringify(payload));
 }
 
 // Trasforma il vecchio documento unico negli appartamenti separati (non scrive nulla)
@@ -108,7 +112,7 @@ function loadActivePropertyState() {
   if (rootData.activePropertyId && rootData.properties[rootData.activePropertyId]) {
     state = rootData.properties[rootData.activePropertyId];
   } else {
-    state = { tenants: [], expenses: [], payments: [] };
+    state = { tenants: [], expenses: [], payments: [], recurring: [] };
   }
 }
 
@@ -280,7 +284,7 @@ onAuthStateChanged(auth, (user) => {
   } else {
     currentUser = null;
     rootData = { activePropertyId: null, properties: {} };
-    state = { tenants: [], expenses: [], payments: [] };
+    state = { tenants: [], expenses: [], payments: [], recurring: [] };
     if (unsubscribe) { unsubscribe(); unsubscribe = null; }
     syncStatus.textContent = "🔒 Accedi per salvare i dati";
     loginBtn.style.display = "inline-block";
@@ -416,7 +420,7 @@ function getAvailableYears() {
   const state = window.getState ? window.getState() : { expenses: [], payments: [] };
   const yearsSet = new Set();
   
-  (state.expenses || []).forEach(e => { if (e.date) yearsSet.add(e.date.split("-")[0]); });
+  getAllExpenses(state).forEach(e => { if (e.date) yearsSet.add(e.date.split("-")[0]); });
   (state.payments || []).forEach(p => { if (p.date) yearsSet.add(p.date.split("-")[0]); });
   (state.tenants || []).forEach(t => {
     if (t.contractStart) yearsSet.add(t.contractStart.split("-")[0]);
@@ -594,7 +598,7 @@ function computeMonthlySeries(state, selectedYear, monthsLabels) {
   const payments = (state.payments || [])
     .map(p => ({ idx: parseMonth(p.date), amount: Number(p.amount || 0) }))
     .filter(p => p.idx !== null);
-  const expenses = (state.expenses || [])
+  const expenses = getAllExpenses(state)
     .map(e => ({ idx: parseMonth(e.date), amount: Number(e.amount || 0), category: e.category }))
     .filter(e => e.idx !== null);
 
@@ -700,6 +704,7 @@ function renderAll() {
   renderTenantChecks();
   renderTenants();
   renderExpenses();
+  renderRecurring();
   renderRooms();
 }
 window.renderAll = renderAll;
@@ -711,7 +716,7 @@ function renderDashboard() {
 
   document.getElementById("statTenants").textContent = state.tenants.filter(t => getTenantStatus(t) === "active").length;
 
-  const filteredExpenses = (state.expenses || []).filter(e => selectedYear === "ALL" || (e.date && e.date.startsWith(selectedYear)));
+  const filteredExpenses = getAllExpenses(state).filter(e => selectedYear === "ALL" || (e.date && e.date.startsWith(selectedYear)));
   document.getElementById("statExpenses").textContent = filteredExpenses.length;
   document.getElementById("statExpenseAmount").textContent = money(filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0));
 
@@ -1097,12 +1102,183 @@ async function deleteArchivedTenant(id) {
   await window.save();
 }
 
+// --- Spese ricorrenti: a carico del proprietario, senza inquilini ---
+// Ogni serie ha una cadenza mensile dalla data di inizio. Le occorrenze non sono salvate: si calcolano
+// al volo fino alla data di sistema (le occorrenze future compaiono man mano che arrivano).
+//   rec = { id, name, category, amount, startDate, months (null = tempo indeterminato),
+//           stopFrom (dal giorno indicato non si genera più nulla), excludeYears (anni eliminati) }
+function getRecurringOccurrences(rec, upTo = todayISO()) {
+  const start = normalizeContractDate(rec.startDate, false);
+  const amount = Number(rec.amount);
+  if (!start || !Number.isFinite(amount)) return [];
+
+  const limit = rec.months ? Math.min(Number(rec.months), 1200) : 1200;
+  const stop = rec.stopFrom ? normalizeContractDate(rec.stopFrom, false) : "";
+  const excluded = (Array.isArray(rec.excludeYears) ? rec.excludeYears : []).map(String);
+
+  const occurrences = [];
+  for (let k = 0; k < limit; k++) {
+    const date = addMonthsISO(start, k);
+    if (date > upTo) break;
+    if (stop && date >= stop) break;
+    if (excluded.includes(date.slice(0, 4))) continue;
+    occurrences.push({
+      id: `${rec.id}@${date}`,
+      recurringId: rec.id,
+      date,
+      description: rec.name,
+      category: rec.category || "Altro",
+      amount,
+      tenantIds: [],
+      notes: "",
+      isRecurring: true
+    });
+  }
+  return occurrences;
+}
+
+// Spese classiche + occorrenze delle spese ricorrenti
+function getAllExpenses(state, upTo = todayISO()) {
+  const generated = ((state && state.recurring) || []).flatMap(rec => getRecurringOccurrences(rec, upTo));
+  return ((state && state.expenses) || []).concat(generated);
+}
+
+function getRecurringStatus(rec, today = todayISO()) {
+  const start = normalizeContractDate(rec.startDate, false);
+  const stop = rec.stopFrom ? normalizeContractDate(rec.stopFrom, false) : "";
+  const lastScheduled = rec.months && start ? addMonthsISO(start, Number(rec.months) - 1) : "";
+
+  if (stop) {
+    return stop <= today
+      ? { key: "stopped", label: `Interrotta dal ${formatDate(stop)}` }
+      : { key: "stopping", label: `Si interrompe dal ${formatDate(stop)}` };
+  }
+  if (start > today) return { key: "upcoming", label: `Inizia il ${formatDate(start)}` };
+  if (lastScheduled && lastScheduled < today) return { key: "ended", label: "Conclusa" };
+  return { key: "active", label: "Attiva" };
+}
+
+function renderRecurring() {
+  const container = document.getElementById("recurringList");
+  if (!container) return;
+  const state = window.getState ? window.getState() : { recurring: [] };
+  const list = state.recurring || [];
+
+  if (!list.length) {
+    container.innerHTML = '<p class="empty">Nessuna spesa ricorrente inserita.</p>';
+    return;
+  }
+
+  const today = todayISO();
+  container.innerHTML = `
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Nome</th><th>Categoria</th><th>Importo mensile</th><th>Inizio</th><th>Durata</th><th>Stato</th><th>Registrate finora</th><th>Azioni</th></tr></thead>
+        <tbody>
+          ${list.map(rec => {
+            const occurrences = getRecurringOccurrences(rec, today);
+            const total = occurrences.reduce((sum, o) => sum + o.amount, 0);
+            const start = normalizeContractDate(rec.startDate, false);
+            const duration = rec.months
+              ? `${rec.months} ${Number(rec.months) === 1 ? "mese" : "mesi"} (fino al ${formatDate(addMonthsISO(start, Number(rec.months) - 1))})`
+              : "A tempo indeterminato";
+            const status = getRecurringStatus(rec, today);
+            return `
+              <tr>
+                <td><strong>${escapeHtml(rec.name)}</strong></td>
+                <td>${escapeHtml(rec.category || "-")}</td>
+                <td>${money(rec.amount)}</td>
+                <td>${formatDate(rec.startDate)}</td>
+                <td>${duration}</td>
+                <td><span class="badge ${status.key === "active" ? "badge-success" : "badge-muted"}">${status.label}</span></td>
+                <td>${occurrences.length} · ${money(total)}</td>
+                <td class="actions-cell">
+                  <button class="btn-secondary" onclick="openRecurringStopModal('${rec.id}')">Interrompi da…</button>
+                  <button class="btn-danger" onclick="deleteRecurring('${rec.id}')">Elimina</button>
+                </td>
+              </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// Valida l'interruzione e calcola quante occorrenze già registrate verrebbero rimosse
+function planRecurringStop(rec, date) {
+  const start = normalizeContractDate(rec.startDate, false);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return { error: "Inserisci una data valida." };
+  if (start && date <= start) {
+    return { error: `La data di interruzione deve essere successiva all'inizio (${formatDate(start)}). Per annullare tutta la spesa usa «Elimina».` };
+  }
+  const updated = { ...rec, stopFrom: date };
+  const before = getRecurringOccurrences(rec);
+  const after = getRecurringOccurrences(updated);
+  const removed = before.length - after.length;
+  const removedAmount = before.reduce((sum, o) => sum + o.amount, 0) - after.reduce((sum, o) => sum + o.amount, 0);
+  return { updated, removed, removedAmount };
+}
+
+function getRecurringForStop() {
+  const state = window.getState();
+  return (state.recurring || []).find(r => r.id === document.getElementById("recurringStopId").value);
+}
+
+function updateRecurringStopPreview() {
+  const rec = getRecurringForStop();
+  const preview = document.getElementById("recurringStopPreview");
+  if (!rec) { preview.innerHTML = ""; return; }
+
+  const date = document.getElementById("recurringStopDate").value;
+  const plan = planRecurringStop(rec, date);
+  if (plan.error) { preview.innerHTML = `<span class="contract-error">${escapeHtml(plan.error)}</span>`; return; }
+
+  preview.innerHTML = plan.removed > 0
+    ? `Verranno rimosse <strong>${plan.removed}</strong> ${plan.removed === 1 ? "occorrenza già registrata" : "occorrenze già registrate"} (${money(plan.removedAmount)}) e tutte le successive.`
+    : `Le occorrenze già registrate non cambiano: dal ${escapeHtml(formatDate(date))} la spesa non verrà più generata.`;
+}
+
+// presetDate: data dell'occorrenza da cui si vuole interrompere (pulsante "Interrompi da qui")
+function openRecurringStopModal(recurringId, presetDate) {
+  const state = window.getState();
+  const rec = (state.recurring || []).find(r => r.id === recurringId);
+  if (!rec) return;
+
+  const start = normalizeContractDate(rec.startDate, false);
+  let date = presetDate || todayISO();
+  if (start && date <= start) date = addMonthsISO(start, 1);
+
+  document.getElementById("recurringStopId").value = recurringId;
+  document.getElementById("recurringStopLabel").textContent =
+    `${rec.name} — ${money(rec.amount)} al mese, dal ${formatDate(rec.startDate)}`;
+  document.getElementById("recurringStopDate").value = date;
+  updateRecurringStopPreview();
+  document.getElementById("recurringStopModal").classList.add("open");
+}
+
+function closeRecurringStopModal() { document.getElementById("recurringStopModal").classList.remove("open"); }
+
+function deleteRecurring(recurringId) {
+  const state = window.getState();
+  const rec = (state.recurring || []).find(r => r.id === recurringId);
+  if (!rec) return;
+
+  const occurrences = getRecurringOccurrences(rec);
+  const total = occurrences.reduce((sum, o) => sum + o.amount, 0);
+  const detail = occurrences.length
+    ? `\n\nVerranno rimosse anche le ${occurrences.length} ${occurrences.length === 1 ? "occorrenza già registrata" : "occorrenze già registrate"} (${money(total)}) dall'elenco spese e dai grafici.`
+    : "";
+  if (!confirm(`Eliminare la spesa ricorrente "${rec.name}"?${detail}`)) return;
+
+  state.recurring = (state.recurring || []).filter(r => r.id !== recurringId);
+  window.save();
+}
+
 function renderExpenses() {
   const state = window.getState ? window.getState() : { expenses: [], tenants: [] };
   const container = document.getElementById("expensesList");
   const selectedYear = document.getElementById("yearFilterExpenses")?.value || "ALL";
 
-  let filteredExpenses = state.expenses || [];
+  let filteredExpenses = getAllExpenses(state);
   if (selectedYear !== "ALL") {
     filteredExpenses = filteredExpenses.filter(e => e.date && e.date.startsWith(selectedYear));
   }
@@ -1119,6 +1295,20 @@ function renderExpenses() {
         <thead><tr><th>Data</th><th>Causale</th><th>Categoria</th><th>Totale</th><th>Inquilini</th><th>Quota indiv.</th><th>Azioni</th></tr></thead>
         <tbody>
           ${sorted.map(expense => {
+            if (expense.isRecurring) {
+              return `
+              <tr class="recurring-row">
+                <td>${formatDate(expense.date)}</td>
+                <td><strong>${escapeHtml(expense.description)}</strong> <span class="badge badge-recurring">🔁 Ricorrente</span></td>
+                <td>${escapeHtml(expense.category || "-")}</td>
+                <td>${money(expense.amount)}</td>
+                <td><small class="muted">Proprietario</small></td>
+                <td>-</td>
+                <td class="actions-cell">
+                  <button class="btn-secondary" onclick="openRecurringStopModal('${expense.recurringId}', '${expense.date}')" title="Interrompe la spesa ricorrente da questa occorrenza in poi">Interrompi da qui</button>
+                </td>
+              </tr>`;
+            }
             const names = expense.tenantIds.map(id => {
               const t = state.tenants.find(item => item.id === id);
               return t ? t.name : "Inquilino storico";
@@ -1242,16 +1432,29 @@ function deleteAnnualDataPrompt() {
   const state = window.getState();
   const expensesToDelete = (state.expenses || []).filter(e => e.date && e.date.startsWith(cleanYear));
   const paymentsToDelete = (state.payments || []).filter(p => p.date && p.date.startsWith(cleanYear));
+  const recurringHits = (state.recurring || [])
+    .map(rec => ({ rec, count: getRecurringOccurrences(rec).filter(o => o.date.startsWith(cleanYear)).length }))
+    .filter(item => item.count > 0);
+  const recurringOccurrences = recurringHits.reduce((sum, item) => sum + item.count, 0);
 
-  if (expensesToDelete.length === 0 && paymentsToDelete.length === 0) {
+  if (expensesToDelete.length === 0 && paymentsToDelete.length === 0 && recurringOccurrences === 0) {
     alert(`Nessuna spesa o bonifico trovato per l'anno ${cleanYear}.`);
     return;
   }
 
-  if (confirm(`⚠️️ ATTENZIONE! Stai per eliminare DEFINITIVAMENTE:\n- ${expensesToDelete.length} Spese del ${cleanYear}\n- ${paymentsToDelete.length} Bonifici del ${cleanYear}\n\nConfermi l'eliminazione?`)) {
+  const recurringLine = recurringOccurrences
+    ? `\n- ${recurringOccurrences} Occorrenze di spese ricorrenti del ${cleanYear} (le serie restano valide negli altri anni)`
+    : "";
+
+  if (confirm(`⚠️️ ATTENZIONE! Stai per eliminare DEFINITIVAMENTE:\n- ${expensesToDelete.length} Spese del ${cleanYear}\n- ${paymentsToDelete.length} Bonifici del ${cleanYear}${recurringLine}\n\nConfermi l'eliminazione?`)) {
     state.expenses = (state.expenses || []).filter(e => !(e.date && e.date.startsWith(cleanYear)));
     state.payments = (state.payments || []).filter(p => !(p.date && p.date.startsWith(cleanYear)));
-    
+
+    const affected = new Set(recurringHits.map(item => item.rec.id));
+    state.recurring = (state.recurring || []).map(rec => affected.has(rec.id)
+      ? { ...rec, excludeYears: Array.from(new Set([...(rec.excludeYears || []).map(String), cleanYear])) }
+      : rec);
+
     window.save();
     alert(`Dati dell'anno ${cleanYear} eliminati con successo.`);
   }
@@ -1309,6 +1512,12 @@ function exportDataToCSV() {
     const tenant = (state.tenants || []).find(t => t.id === p.tenantId);
     const tenantName = tenant ? tenant.name : "Sconosciuto";
     csvContent += row([p.id, p.tenantId, tenantName, p.date, p.description, p.amount || 0, p.notes]);
+  });
+
+  csvContent += "\n=== SPESE RICORRENTI ===\n";
+  csvContent += "ID;Nome;Categoria;Importo Mensile;Data Inizio;Mesi;Interrotta Da;Anni Esclusi\n";
+  (state.recurring || []).forEach(r => {
+    csvContent += row([r.id, r.name, r.category, r.amount || 0, r.startDate, r.months || "", r.stopFrom || "", (r.excludeYears || []).join(",")]);
   });
 
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -1381,6 +1590,7 @@ function importDataFromCSV(event) {
       const newTenants = [];
       const newExpenses = [];
       const newPayments = [];
+      const newRecurring = [];
 
       rows.forEach(rawRow => {
         const cols = rawRow.map(col => col.trim());
@@ -1390,6 +1600,7 @@ function importDataFromCSV(event) {
         if (first.includes("=== INQUILINI ===")) { currentSection = "tenants"; sectionsFound++; return; }
         if (first.includes("=== SPESE APPARTAMENTO ===")) { currentSection = "expenses"; sectionsFound++; return; }
         if (first.includes("=== BONIFICI INQUILINI ===")) { currentSection = "payments"; sectionsFound++; return; }
+        if (first.includes("=== SPESE RICORRENTI ===")) { currentSection = "recurring"; sectionsFound++; return; }
 
         if (first === "ID" || first === "Nome") return;
 
@@ -1424,10 +1635,22 @@ function importDataFromCSV(event) {
             amount: toNumber(cols[5]),
             notes: cols[6] || ""
           });
+        } else if (currentSection === "recurring" && cols.length >= 5) {
+          const months = parseInt(cols[5], 10);
+          newRecurring.push({
+            id: cleanId(cols[0]) || newId("recurring"),
+            name: cols[1] || "",
+            category: cols[2] || "Altro",
+            amount: toNumber(cols[3]),
+            startDate: cols[4] || "",
+            months: Number.isInteger(months) && months > 0 ? months : null,
+            stopFrom: cols[6] || "",
+            excludeYears: cols[7] ? cols[7].split(",").map(x => x.trim()).filter(Boolean) : []
+          });
         }
       });
 
-      const totalRecords = newTenants.length + newExpenses.length + newPayments.length;
+      const totalRecords = newTenants.length + newExpenses.length + newPayments.length + newRecurring.length;
 
       if (sectionsFound === 0 && totalRecords === 0) {
         alert("Nessun dato valido trovato nel file. Verificare che il file sia salvato in formato CSV con separatore punto e virgola (;).");
@@ -1436,14 +1659,15 @@ function importDataFromCSV(event) {
 
       const isEmptyImport = totalRecords === 0;
       const message = isEmptyImport
-        ? "Il file non contiene dati.\n\nProseguendo verranno CANCELLATI tutti gli inquilini, le spese e i bonifici dell'appartamento corrente.\n\nVuoi azzerare l'appartamento?"
-        : `Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese e ${newPayments.length} bonifici.\n\nVuoi sovrascrivere i dati dell'appartamento corrente con questi?`;
+        ? "Il file non contiene dati.\n\nProseguendo verranno CANCELLATI tutti gli inquilini, le spese, i bonifici e le spese ricorrenti dell'appartamento corrente.\n\nVuoi azzerare l'appartamento?"
+        : `Trovati ${newTenants.length} inquilini, ${newExpenses.length} spese, ${newPayments.length} bonifici e ${newRecurring.length} spese ricorrenti.\n\nVuoi sovrascrivere i dati dell'appartamento corrente con questi?`;
 
       if (confirm(message)) {
         const state = window.getState();
         state.tenants = newTenants;
         state.expenses = newExpenses;
         state.payments = newPayments;
+        state.recurring = newRecurring;
 
         window.save();
         alert(isEmptyImport ? "Appartamento azzerato con successo!" : "Importazione completata con successo!");
@@ -1510,7 +1734,8 @@ Object.assign(window, {
   toggleSection, toggleChartsToggle, exportDataToCSV, importDataFromCSV, deleteAnnualDataPrompt,
   sendExpenseWhatsApp, sendWhatsApp, deleteTenant, deleteExpense, deletePayment,
   openPaymentModal, closePaymentModal, renderDashboard, renderExpenses, renderRooms, renderAll,
-  openContractModal, closeContractModal, setContractQuickExtend, updateContractForm, deleteArchivedTenant
+  openContractModal, closeContractModal, setContractQuickExtend, updateContractForm, deleteArchivedTenant,
+  openRecurringStopModal, closeRecurringStopModal, updateRecurringStopPreview, deleteRecurring
 });
 
 document.getElementById("tenantForm")?.addEventListener("submit", e => {
@@ -1530,6 +1755,70 @@ document.getElementById("tenantForm")?.addEventListener("submit", e => {
   window.save();
   e.target.reset();
 });
+
+// Categorie della spesa ricorrente = quelle delle spese classiche; data di inizio proposta = oggi
+(function initRecurringForm() {
+  const source = document.getElementById("expenseCategory");
+  const target = document.getElementById("recurringCategory");
+  if (source && target) target.innerHTML = source.innerHTML;
+  const start = document.getElementById("recurringStart");
+  if (start) start.value = todayISO();
+})();
+
+document.getElementById("recurringForm")?.addEventListener("submit", e => {
+  e.preventDefault();
+  const name = document.getElementById("recurringName").value.trim();
+  const amount = parseFloat(document.getElementById("recurringAmount").value);
+  const startDate = document.getElementById("recurringStart").value;
+  const fixed = document.getElementById("recurringFixed").checked;
+  const months = parseInt(document.getElementById("recurringMonths").value, 10);
+
+  if (!name) { alert("Inserisci il nome della spesa."); return; }
+  if (!(amount > 0)) { alert("Inserisci un importo mensile maggiore di zero."); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { alert("Inserisci la data di inizio."); return; }
+  if (fixed && !(Number.isInteger(months) && months >= 1 && months <= 600)) {
+    alert("Inserisci il numero di mesi (da 1 a 600) oppure scegli «A tempo indeterminato».");
+    return;
+  }
+
+  const state = window.getState();
+  state.recurring = state.recurring || [];
+  state.recurring.push({
+    id: "recurring_" + Date.now(),
+    name,
+    category: document.getElementById("recurringCategory").value || "Altro",
+    amount,
+    startDate,
+    months: fixed ? months : null,
+    stopFrom: "",
+    excludeYears: []
+  });
+  window.save();
+
+  e.target.reset();
+  document.getElementById("recurringStart").value = todayISO();
+});
+
+document.getElementById("recurringStopForm")?.addEventListener("submit", e => {
+  e.preventDefault();
+  const rec = getRecurringForStop();
+  if (!rec) return;
+
+  const date = document.getElementById("recurringStopDate").value;
+  const plan = planRecurringStop(rec, date);
+  if (plan.error) { alert(plan.error); return; }
+
+  if (plan.removed > 0 && !confirm(`Interrompere "${rec.name}" dal ${formatDate(date)}?\nVerranno rimosse ${plan.removed} ${plan.removed === 1 ? "occorrenza già registrata" : "occorrenze già registrate"} (${money(plan.removedAmount)}).`)) return;
+
+  const state = window.getState();
+  const index = (state.recurring || []).findIndex(r => r.id === rec.id);
+  if (index === -1) return;
+  state.recurring[index] = plan.updated;
+  window.save();
+  closeRecurringStopModal();
+});
+
+document.getElementById("recurringStopDate")?.addEventListener("input", updateRecurringStopPreview);
 
 document.getElementById("expenseForm")?.addEventListener("submit", e => {
   e.preventDefault();
@@ -1605,4 +1894,5 @@ document.getElementById("contractForm")?.addEventListener("submit", e => {
 window.addEventListener("click", e => {
   if (e.target === document.getElementById("paymentModal")) closePaymentModal();
   if (e.target === document.getElementById("contractModal")) closeContractModal();
+  if (e.target === document.getElementById("recurringStopModal")) closeRecurringStopModal();
 });

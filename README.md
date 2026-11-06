@@ -2,7 +2,7 @@
 
 Web app per la contabilità di uno o più appartamenti in affitto condiviso: inquilini, spese, bonifici, saldi individuali, grafici e promemoria WhatsApp. I dati sono salvati su Firebase (accesso con Google) e si possono esportare/importare in CSV.
 
-Ultimo aggiornamento di questo documento: 19 ottobre 2026 (inquilini archiviati, gestione contratto, messaggio ultimo bonifico).
+Ultimo aggiornamento di questo documento: 19 ottobre 2026 (inquilini archiviati, gestione contratto, messaggio ultimo bonifico, spese ricorrenti).
 
 ---
 
@@ -44,9 +44,10 @@ I tre file `index.html`, `style.css` e `script.js` devono stare nella **stessa c
 - Per ogni inquilino: pulsante **Contratto** (rinnovo/estensione o chiusura anticipata). Per gli archiviati il pulsante di eliminazione è **Elimina archiviato** (vedi sezione 5).
 
 **Spese**
+- In cima, una riga espandibile (chiusa di default) **"🔁 Aggiungi spesa ricorrente"**: vedi sezione 5-bis.
 - Form per registrare una spesa: causale, importo, data, categoria (Luce, Gas, Acqua, Internet, Pulizie, Manutenzione, Condominio, Altro), inquilini coinvolti, note.
 - La selezione degli inquilini è facoltativa: senza inquilini la spesa è "generale" e la quota individuale è 0,00 €.
-- "Elenco spese" è una scheda espandibile, con filtro per anno, condivisione su WhatsApp ed eliminazione della singola spesa.
+- "Elenco spese" è una scheda espandibile, con filtro per anno, condivisione su WhatsApp ed eliminazione della singola spesa. Contiene anche le occorrenze delle spese ricorrenti (badge "🔁 Ricorrente", inquilini = "Proprietario").
 - Pulsante per eliminare in blocco spese e bonifici di un anno (irreversibile).
 
 **Stanze**
@@ -61,7 +62,7 @@ Struttura su Firestore, **un documento per appartamento**:
 ```
 users/{uid}                       documento storico (vecchia struttura): letto una sola volta, poi non più modificato
 users/{uid}/settings/app          { activePropertyId, migratedAt, migratedFrom }
-users/{uid}/properties/{propId}   { name, tenants, expenses, payments, updatedAt }
+users/{uid}/properties/{propId}   { name, tenants, expenses, payments, recurring (solo se presente), updatedAt }
 ```
 
 - **Migrazione**: al primo accesso una transazione copia ogni appartamento del vecchio documento in un documento separato e crea `settings/app`. Il vecchio documento non viene modificato (resta come backup). Se `settings/app` esiste già, la migrazione non si ripete.
@@ -112,6 +113,27 @@ Il pulsante **Elimina archiviato** (solo sugli archiviati) rimuove dal resoconto
 
 Prima di procedere compare un riepilogo con numero e totale di bonifici e spese, e l'importo che l'inquilino doveva ancora (che non verrà più contato in "Totale da ricevere"). L'operazione è irreversibile: esporta prima un backup CSV. Per gli inquilini attivi o in attivazione resta il pulsante **Elimina**, che toglie solo l'inquilino (vedi sezione 13).
 
+## 5-bis. Spese ricorrenti
+
+Spese fisse **a carico del proprietario**: non hanno inquilini, quindi non entrano nei saldi degli inquilini né nelle schede Stanze.
+
+**Inserimento** (Spese → riga "Aggiungi spesa ricorrente"):
+- Nome della spesa, importo **mensile**, categoria (stesso elenco delle spese classiche, copiato dal modulo "Aggiungi spesa") e data di inizio (proposta: oggi).
+- Durata: **a tempo indeterminato** oppure **un periodo di N mesi** (da 1 a 600).
+- La spesa si ripete ogni mese nello stesso giorno della data di inizio (se il mese è più corto, l'ultimo giorno: il 31 gennaio diventa il 28/29 febbraio).
+
+**Conteggio**:
+- Le occorrenze non sono salvate una per una: si calcolano fino alla **data di sistema**. Le occorrenze future compaiono (in elenco, riquadri e grafici) man mano che la loro data arriva. Una serie da 12 mesi iniziata oggi mostra quindi una sola occorrenza, poi una al mese.
+- Compaiono nell'**Elenco spese** (con il filtro anno), nei riquadri della Dashboard ("Spese registrate", "Totale spese") e nei grafici in base alla categoria: Luce, Gas, Acqua nel grafico 3; Condominio, Manutenzione, Internet nel grafico 4; tutte le categorie nel totale spese del grafico 2.
+
+**Interruzione "da un certo punto in poi"**:
+- Pulsante **Interrompi da…** nell'elenco "Spese ricorrenti inserite", oppure **Interrompi da qui** su una singola occorrenza dell'elenco spese.
+- Si sceglie il giorno di interruzione (deve essere successivo alla data di inizio): da quel giorno in poi, compreso, non si genera più nulla. L'anteprima mostra quante occorrenze già registrate vengono rimosse (con conferma). Se la data è futura, le occorrenze già registrate non cambiano.
+- **Elimina** cancella l'intera serie con tutte le sue occorrenze.
+- **Elimina per anno** (scheda Spese) toglie anche le occorrenze ricorrenti di quell'anno; la serie resta valida negli altri anni.
+
+**Dati**: nel documento dell'appartamento il campo `recurring` (lista di serie `{ id, name, category, amount, startDate, months, stopFrom, excludeYears }`) compare solo quando esiste almeno una spesa ricorrente. Le regole Firestore vanno aggiornate (sezione 11).
+
 ## 6. Calcolo dei saldi
 
 - **Affitti maturati**: un mese per ogni mese compreso tra inizio e fine contratto, **fino al mese corrente** (i mesi futuri non maturano ancora) × affitto mensile. Il mese della data di fine (o di chiusura anticipata) conta per intero.
@@ -142,12 +164,13 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 
 ## 9. Export / Import CSV
 
-- File con separatore `;`, codifica UTF-8 con BOM, tre sezioni: `=== INQUILINI ===`, `=== SPESE APPARTAMENTO ===`, `=== BONIFICI INQUILINI ===`, ciascuna con la riga di intestazione.
+- File con separatore `;`, codifica UTF-8 con BOM, quattro sezioni: `=== INQUILINI ===`, `=== SPESE APPARTAMENTO ===`, `=== BONIFICI INQUILINI ===`, `=== SPESE RICORRENTI ===`, ciascuna con la riga di intestazione. La sezione delle spese ricorrenti ha le colonne ID, Nome, Categoria, Importo Mensile, Data Inizio, Mesi (vuoto = tempo indeterminato), Interrotta Da, Anni Esclusi.
 - La sezione inquilini ha la colonna finale **Chiuso in anticipo** (`1` se il contratto è stato chiuso in anticipo). I file esportati in precedenza, senza questa colonna, si importano normalmente.
 - Tutti i campi sono tra virgolette, con `"` raddoppiate: nomi e note con virgolette, `;` o a capo si esportano e reimportano correttamente.
 - L'esportazione riguarda l'**appartamento attivo**. Nei bonifici di un inquilino non più presente il nome è "Sconosciuto" (il nome serve solo alla lettura: all'import contano ID inquilino, data, causale, importo, note).
-- L'importazione **sostituisce** inquilini, spese e bonifici dell'appartamento attivo, dopo una conferma che mostra quanti record sono stati trovati. Importi con virgola (`350,50`) o con punto (`350.5`) sono accettati. Un file senza struttura valida viene rifiutato.
-- **Reset di un appartamento**: seleziona l'appartamento, esporta un backup, poi importa `reset_database_vuoto.csv`. Il file ha solo le intestazioni: l'app chiede una conferma esplicita e azzera inquilini, spese e bonifici. Per svuotare un altro appartamento ripeti l'operazione dopo averlo selezionato.
+- Un file senza la sezione delle spese ricorrenti (esportato prima di questo aggiornamento) si importa normalmente, ma azzera le spese ricorrenti dell'appartamento: l'importazione sostituisce sempre tutti i dati.
+- L'importazione **sostituisce** inquilini, spese, bonifici e spese ricorrenti dell'appartamento attivo, dopo una conferma che mostra quanti record sono stati trovati. Importi con virgola (`350,50`) o con punto (`350.5`) sono accettati. Un file senza struttura valida viene rifiutato.
+- **Reset di un appartamento**: seleziona l'appartamento, esporta un backup, poi importa `reset_database_vuoto.csv`. Il file ha solo le intestazioni: l'app chiede una conferma esplicita e azzera inquilini, spese, bonifici e spese ricorrenti. Per svuotare un altro appartamento ripeti l'operazione dopo averlo selezionato.
 
 ## 10. WhatsApp
 
@@ -157,7 +180,8 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 ## 11. Regole di sicurezza Firestore (`firestore.rules`)
 
 - Ogni utente può leggere e scrivere solo sotto `users/{il proprio uid}`.
-- Un documento appartamento accetta solo i campi `name`, `tenants`, `expenses`, `payments`, `updatedAt`, con tipi controllati, nome da 1 a 100 caratteri e al massimo 200 inquilini.
+- Un documento appartamento accetta solo i campi `name`, `tenants`, `expenses`, `payments`, `recurring` (facoltativo, lista di al massimo 200 voci), `updatedAt`, con tipi controllati, nome da 1 a 100 caratteri e al massimo 200 inquilini.
+- **Dopo l'introduzione delle spese ricorrenti ripubblica `firestore.rules`**: con le regole precedenti il salvataggio di un appartamento che contiene spese ricorrenti viene rifiutato ("Permessi Firestore insufficienti").
 - `settings/app` accetta solo `activePropertyId`, `migratedAt`, `migratedFrom`.
 - Il vecchio documento `users/{uid}` resta modificabile finché non cambi la regola (vedi sezione 2).
 - Tutto il resto è vietato.
@@ -194,6 +218,10 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 **Quinta revisione**
 - Intestazione: messaggio con la data dell'ultimo bonifico (gg/mm/aaaa), visibile in tutte le schede sotto la gestione dell'appartamento.
 
+**Sesta revisione**
+- Spese ricorrenti a carico del proprietario: inserimento (a tempo indeterminato o per N mesi), interruzione da una data in poi, eliminazione, presenza nell'elenco spese, nei riquadri e nei grafici per categoria.
+- CSV: nuova sezione `=== SPESE RICORRENTI ===`; `reset_database_vuoto.csv` e `firestore.rules` aggiornati.
+
 ---
 
 ## 13. Errori e limiti noti NON ancora corretti
@@ -223,5 +251,11 @@ Lo stato aperto/chiuso delle schede generate dinamicamente (riquadri degli inqui
 **Ultimo bonifico**
 20. Il messaggio nell'intestazione mostra la data più recente tra i bonifici, non il momento in cui l'ultimo è stato inserito: un bonifico inserito oggi ma datato in passato non cambia il messaggio. I bonifici con data non valida vengono ignorati.
 
+**Spese ricorrenti**
+21. Cadenza solo **mensile**; l'importo è fisso per tutta la durata (per cambiare importo: interrompi la serie e creane una nuova).
+22. Le occorrenze future non sono conteggiate fino alla loro data: i grafici e i totali non mostrano previsioni.
+23. L'eliminazione per anno rimuove solo le occorrenze di quell'anno (annotando l'anno nella serie): non c'è un modo per togliere un solo mese in mezzo a una serie.
+24. Le spese ricorrenti non si condividono su WhatsApp e non hanno note.
+
 **Non verificato**
-21. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset, stati degli inquilini, contratto, cancellazione degli archiviati, messaggio dell'ultimo bonifico). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.
+25. Le modifiche sono state provate con un Firestore e un DOM simulati (migrazione, salvataggi, sezioni, grafici, schede aperte, export/import, reset, stati degli inquilini, contratto, cancellazione degli archiviati, messaggio dell'ultimo bonifico, spese ricorrenti). Non sono state provate su Firebase reale, in un browser, né le regole con l'emulatore Firestore. Prima di usarle con i dati veri, esporta un backup CSV di ogni appartamento.

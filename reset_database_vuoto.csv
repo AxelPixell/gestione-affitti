@@ -6,3 +6,6 @@ ID;Data;Causale;Categoria;Importo Totale;ID Inquilini Coinvolti;Note
 
 === BONIFICI INQUILINI ===
 ID;ID Inquilino;Nome Inquilino;Data;Causale;Importo;Note
+
+=== SPESE RICORRENTI ===
+ID;Nome;Categoria;Importo Mensile;Data Inizio;Mesi;Interrotta Da;Anni Esclusi

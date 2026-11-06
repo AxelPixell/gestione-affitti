@@ -417,3 +417,7 @@ td.actions-cell button + button { margin-left: 6px; }
 }
 .last-payment-notice:empty { display: none; }
 
+/* Spese ricorrenti */
+.badge-recurring { color: #1e40af; background: #dbeafe; }
+.recurring-row td:first-child { border-left: 4px solid #60a5fa; }
+

@@ -128,6 +128,37 @@
 
     <!-- SPESE -->
     <section id="expenses" class="page">
+      <!-- SPESE RICORRENTI (chiusa di default) -->
+      <div class="card">
+        <div class="collapsible-header" onclick="toggleSection('recurringContent', 'recurringArrow')">
+          <h2 style="margin: 0;">🔁 Aggiungi spesa ricorrente</h2>
+          <span id="recurringArrow" class="arrow-icon">▼</span>
+        </div>
+
+        <div id="recurringContent" class="collapsible-content">
+          <form id="recurringForm" style="margin-top: 15px;">
+            <div class="grid">
+              <div class="field"><label for="recurringName">Nome della spesa *</label><input id="recurringName" required placeholder="Es. Internet fibra"></div>
+              <div class="field"><label for="recurringAmount">Importo mensile *</label><input id="recurringAmount" type="number" min="0" step="0.01" required></div>
+              <div class="field"><label for="recurringCategory">Categoria</label><select id="recurringCategory"></select></div>
+              <div class="field"><label for="recurringStart">Data di inizio *</label><input id="recurringStart" type="date" required></div>
+            </div>
+
+            <div class="field">
+              <label>Durata</label>
+              <label class="check-item"><input type="radio" id="recurringIndefinite" name="recurringDuration" checked> A tempo indeterminato</label>
+              <label class="check-item" style="margin-top: 8px;"><input type="radio" id="recurringFixed" name="recurringDuration"> Per un periodo di <input id="recurringMonths" type="number" min="1" max="600" step="1" style="width: 90px; margin: 0 6px;" onfocus="document.getElementById('recurringFixed').checked = true"> mesi</label>
+            </div>
+
+            <p class="muted">La spesa si ripete ogni mese, nello stesso giorno della data di inizio, ed è a carico del proprietario (nessun inquilino). Compare nell'elenco spese e nei grafici della Dashboard in base alla categoria; le occorrenze future vengono conteggiate man mano che arrivano.</p>
+            <button class="btn-primary" type="submit">Aggiungi spesa ricorrente</button>
+          </form>
+
+          <h3 style="margin: 25px 0 10px;">Spese ricorrenti inserite</h3>
+          <div id="recurringList"></div>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Aggiungi spesa</h2>
         <form id="expenseForm">
@@ -212,6 +243,28 @@
         <div class="actions">
           <button class="btn-primary" type="submit">Salva bonifico</button>
           <button class="btn-secondary" type="button" onclick="closePaymentModal()">Annulla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODALE INTERRUZIONE SPESA RICORRENTE -->
+  <div id="recurringStopModal" class="modal">
+    <div class="modal-content">
+      <button class="close" onclick="closeRecurringStopModal()">×</button>
+      <h2>Interrompi spesa ricorrente</h2>
+      <p id="recurringStopLabel" class="muted"></p>
+      <form id="recurringStopForm">
+        <input type="hidden" id="recurringStopId">
+        <div class="field">
+          <label for="recurringStopDate">Interrompi dal giorno *</label>
+          <input id="recurringStopDate" type="date" required>
+          <small class="muted">Le occorrenze da questa data in poi (compresa) non vengono più conteggiate.</small>
+        </div>
+        <div id="recurringStopPreview" class="contract-preview"></div>
+        <div class="actions">
+          <button class="btn-danger" type="submit">Interrompi</button>
+          <button class="btn-secondary" type="button" onclick="closeRecurringStopModal()">Annulla</button>
         </div>
       </form>
     </div>
