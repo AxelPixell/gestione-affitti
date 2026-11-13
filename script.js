@@ -1473,12 +1473,12 @@ function sendExpenseWhatsApp(expenseId) {
   const share = expense.tenantIds.length ? expense.amount / expense.tenantIds.length : 0;
 
   let msg = `📌 *NUOVA SPESA REGISTRATA*\n\n`;
-  msg += `🔹 *Causale:* ${expense.description}\n`;
-  msg += `💶 *Importo totale:* ${money(expense.amount)}\n`;
-  msg += `📅 *Data:* ${formatDate(expense.date)}\n`;
-  if (expense.category) msg += `🏷️ *Categoria:* ${expense.category}\n`;
-  msg += `\n👥 *Inquilini coinvolti:* ${tenantNames.length ? tenantNames.join(", ") : "Nessuno (Spesa generale)"}\n`;
-  if (tenantNames.length) msg += `👉 *Quota a persona:* ${money(share)}\n`;
+  msg += `*Causale:* ${expense.description}\n`;
+  msg += `*Importo totale:* ${money(expense.amount)}\n`;
+  //msg += `📅 *Data:* ${formatDate(expense.date)}\n`;
+  //if (expense.category) msg += `🏷️ *Categoria:* ${expense.category}\n`;
+  msg += `\n*Inquilini coinvolti:* ${tenantNames.length ? tenantNames.join(", ") : "Nessuno (Spesa generale)"}\n`;
+  if (tenantNames.length) msg += `*Quota a persona:* ${money(share)}\n`;
   if (expense.notes) msg += `\n📝 *Note:* ${expense.notes}\n`;
 
   window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
